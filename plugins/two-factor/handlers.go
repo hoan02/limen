@@ -113,7 +113,7 @@ func (a *twoFactorHandlers) VerifyLoginWithTwoFactor(w http.ResponseWriter, r *h
 		v.Field("code").Required()
 		v.Field("method").
 			Optional(string(TwoFactorMethodTOTP)).
-			In(string(TwoFactorMethodOTP), string(TwoFactorMethodTOTP))
+			In([]string{string(TwoFactorMethodOTP), string(TwoFactorMethodTOTP)})
 	})
 
 	if body == nil {

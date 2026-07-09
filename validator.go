@@ -243,15 +243,10 @@ func (f *FieldValidator) Matches(pattern string) *FieldValidator {
 	})
 }
 
-// In requires the value to equal one of the allowed values, which must be comparable.
-func (f *FieldValidator) In(allowed ...any) *FieldValidator {
+func (f *FieldValidator) In(allowed []string) *FieldValidator {
 	return f.apply(func() {
-		if !slices.Contains(allowed, f.value) {
-			parts := make([]string, len(allowed))
-			for i, a := range allowed {
-				parts[i] = fmt.Sprint(a)
-			}
-			f.fail(fmt.Sprintf("must be one of: %s", strings.Join(parts, ", ")))
+		if s, ok := f.str(); ok && !slices.Contains(allowed, s) {
+			f.fail(fmt.Sprintf("must be one of: %s", strings.Join(allowed, ", ")))
 		}
 	})
 }

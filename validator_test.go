@@ -85,7 +85,7 @@ func TestOptionalDefault(t *testing.T) {
 
 		v := NewValidator()
 		v.data = map[string]any{}
-		v.Field("method").Optional("totp").In("otp", "totp")
+		v.Field("method").Optional("totp").In([]string{"otp", "totp"})
 		require.NoError(t, v.Validate())
 		assert.Equal(t, "totp", v.data["method"])
 	})
@@ -95,7 +95,7 @@ func TestOptionalDefault(t *testing.T) {
 
 		v := NewValidator()
 		v.data = map[string]any{"method": "bogus"}
-		v.Field("method").Optional("totp").In("otp", "totp")
+		v.Field("method").Optional("totp").In([]string{"otp", "totp"})
 		assert.Error(t, v.Validate())
 	})
 }
@@ -189,18 +189,17 @@ func TestIn(t *testing.T) {
 	tests := []struct {
 		name    string
 		value   any
-		allowed []any
+		allowed []string
 		wantErr bool
 	}{
-		{"not in list", "pending", []any{"active", "inactive"}, true},
-		{"in list", "admin", []any{"admin", "user", "guest"}, false},
-		{"number in list", 2.0, []any{1.0, 2.0, 3.0}, false},
+		{"not in list", "pending", []string{"active", "inactive"}, true},
+		{"in list", "admin", []string{"admin", "user", "guest"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := runRule(tt.value, func(f *FieldValidator) { f.In(tt.allowed...) })
+			err := runRule(tt.value, func(f *FieldValidator) { f.In(tt.allowed) })
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -434,7 +433,7 @@ func TestBindAndValidate(t *testing.T) {
 
 	validate := func(v *Validator) {
 		v.Field("email").Required().Email()
-		v.Field("method").Optional("totp").In("otp", "totp")
+		v.Field("method").Optional("totp").In([]string{"otp", "totp"})
 		v.Field("metadata").Optional().Object()
 	}
 
