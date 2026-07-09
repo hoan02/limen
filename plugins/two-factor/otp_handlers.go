@@ -20,8 +20,8 @@ func newOTPHandlers(otp *otp, responder *limen.Responder) *otpHandlers {
 }
 
 func (o *otpHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, o.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
-		return v.RequiredString("email", data["email"])
+	body := limen.ValidateJSON(w, r, o.responder, func(v *limen.Validator) {
+		v.Field("email").Required().Email()
 	})
 
 	if body == nil {

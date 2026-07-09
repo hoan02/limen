@@ -1,11 +1,13 @@
 package limen
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 )
 
 type ValidationError struct {
@@ -57,6 +59,7 @@ func (e *Errors) GetErrors() []*ValidationError {
 
 type Validator struct {
 	errors *Errors
+	data   map[string]any // bound request body
 }
 
 func NewValidator() *Validator {
@@ -72,117 +75,243 @@ func (v *Validator) Validate() error {
 	return nil
 }
 
-func (v *Validator) RequiredString(field string, value any) *Validator {
+// Field begins a validation chain for a single body field.
+func (v *Validator) Field(field string) *FieldValidator {
+	return &FieldValidator{v: v, field: field, value: v.data[field]}
+}
+
+type FieldValidator struct {
+	v     *Validator
+	field string
+	value any
+	skip  bool // when true, remaining rules are skipped
+}
+
+func (f *FieldValidator) Field(field string) *FieldValidator {
+	return f.v.Field(field)
+}
+
+func isAbsent(value any) bool {
 	if value == nil {
-		v.errors.Add(field, "is required", true)
-		return v
+		return true
 	}
-
-	valueString, ok := value.(string)
-	if !ok || (ok && strings.TrimSpace(valueString) == "") {
-		v.errors.Add(field, "is required", true)
+	if s, ok := value.(string); ok {
+		return strings.TrimSpace(s) == ""
 	}
-
-	return v
+	return false
 }
 
-func (v *Validator) MinLength(field, value string, minLen int) *Validator {
-	if len(value) < minLen {
-		v.errors.Add(field, fmt.Sprintf("must be at least %d characters", minLen), true)
-	}
-	return v
+func (f *FieldValidator) Required() *FieldValidator {
+	return f.apply(func() {
+		if isAbsent(f.value) {
+			f.fail("is required")
+			f.skip = true
+		}
+	})
 }
 
-func (v *Validator) MaxLength(field, value string, maxLen int) *Validator {
-	if len(value) > maxLen {
-		v.errors.Add(field, fmt.Sprintf("must be at most %d characters", maxLen), true)
-	}
-	return v
+func (f *FieldValidator) RequiredWhen(condition func() bool) *FieldValidator {
+	return f.apply(func() {
+		if condition() {
+			f.Required()
+			return
+		}
+		f.Optional()
+	})
 }
 
-func (v *Validator) Length(field, value string, length int) *Validator {
-	if len(value) != length {
-		v.errors.Add(field, fmt.Sprintf("must be exactly %d characters", length), true)
+// Optional skips remaining rules if the field is absent.
+// If a default is provided, it is written into the body first.
+func (f *FieldValidator) Optional(defaultValue ...any) *FieldValidator {
+	if isAbsent(f.value) {
+		if len(defaultValue) > 0 {
+			f.value = defaultValue[0]
+			f.v.data[f.field] = defaultValue[0]
+		}
+		f.skip = true
 	}
-	return v
+	return f
 }
 
-func (v *Validator) Email(field string, value any) *Validator {
-	if value == nil || value == "" {
-		return v
+func (f *FieldValidator) apply(rule func()) *FieldValidator {
+	if !f.skip {
+		rule()
 	}
-	emailRegex := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
-	matched, err := regexp.MatchString(emailRegex, value.(string))
-	if err != nil || !matched {
-		v.errors.Add(field, "must be a valid email address", true)
-	}
-	return v
+	return f
 }
 
-func (v *Validator) Custom(field string, fn func() error, formatErrorMessage bool) *Validator {
-	err := fn()
-	if err != nil {
-		v.errors.Add(field, err.Error(), formatErrorMessage)
-	}
-	return v
+// fail records a field-prefixed validation error.
+func (f *FieldValidator) fail(message string) {
+	f.v.errors.Add(f.field, message, true)
 }
 
-func (v *Validator) URL(field, value string) *Validator {
-	if value == "" {
-		return v // Empty URLs are handled by RequiredString()
+func (f *FieldValidator) str() (string, bool) {
+	s, ok := f.value.(string)
+	if !ok {
+		f.fail("must be a string")
+		f.skip = true
+		return "", false
 	}
-	urlRegex := `^https?://[^\s/$.?#].[^\s]*$`
-	matched, err := regexp.MatchString(urlRegex, value)
-	if err != nil || !matched {
-		v.errors.Add(field, "must be a valid URL", true)
-	}
-	return v
+	f.value = strings.TrimSpace(s)
+	f.v.data[f.field] = f.value
+	return s, true
 }
 
-func (v *Validator) In(field, value string, allowed []string) *Validator {
-	if slices.Contains(allowed, value) {
-		return v
+func (f *FieldValidator) size() (int, bool) {
+	switch v := f.value.(type) {
+	case string:
+		return len(v), true
+	case []any:
+		return len(v), true
+	case map[string]any:
+		return len(v), true
+	default:
+		f.fail("must be a string, array, or object")
+		f.skip = true
+		return 0, false
 	}
-	v.errors.Add(field, fmt.Sprintf("must be one of: %s", strings.Join(allowed, ", ")), true)
-	return v
 }
 
-func (v *Validator) Contains(field, value, substr string) *Validator {
-	if !strings.Contains(value, substr) {
-		v.errors.Add(field, fmt.Sprintf("must contain '%s'", substr), true)
-	}
-	return v
+func (f *FieldValidator) String() *FieldValidator {
+	return f.apply(func() { f.str() })
 }
 
-func (v *Validator) ContainsAny(field, value, chars string) *Validator {
-	if !strings.ContainsAny(value, chars) {
-		v.errors.Add(field, fmt.Sprintf("must contain at least one of: %s", chars), true)
-	}
-	return v
+func (f *FieldValidator) MinLength(minLen int) *FieldValidator {
+	return f.apply(func() {
+		if n, ok := f.size(); ok && n < minLen {
+			f.fail(fmt.Sprintf("must have a length of at least %d", minLen))
+		}
+	})
 }
 
-func (v *Validator) NotContains(field, value, substr string) *Validator {
-	if strings.Contains(value, substr) {
-		v.errors.Add(field, fmt.Sprintf("must not contain '%s'", substr), true)
-	}
-	return v
+func (f *FieldValidator) MaxLength(maxLen int) *FieldValidator {
+	return f.apply(func() {
+		if n, ok := f.size(); ok && n > maxLen {
+			f.fail(fmt.Sprintf("must have a length of at most %d", maxLen))
+		}
+	})
 }
 
-func (v *Validator) Matches(field, value, pattern string) *Validator {
-	matched, err := regexp.MatchString(pattern, value)
-	if err != nil {
-		v.errors.Add(field, "invalid pattern", true)
-		return v
-	}
-	if !matched {
-		v.errors.Add(field, "does not match required format", true)
-	}
-	return v
+func (f *FieldValidator) Length(length int) *FieldValidator {
+	return f.apply(func() {
+		if n, ok := f.size(); ok && n != length {
+			f.fail(fmt.Sprintf("must have a length of exactly %d", length))
+		}
+	})
 }
 
-// ValidateJSON decodes the JSON body of the request and validates it using the validateFunc.
-// It returns the decoded data if the validation succeeds, otherwise it returns nil and an error is written to the response.
-func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator, map[string]any) *Validator) map[string]any {
+func (f *FieldValidator) Email() *FieldValidator {
+	return f.apply(func() {
+		s, ok := f.str()
+		if !ok {
+			return
+		}
+		emailRegex := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
+		if matched, err := regexp.MatchString(emailRegex, s); err != nil || !matched {
+			f.fail("must be a valid email address")
+		}
+	})
+}
+
+func (f *FieldValidator) URL() *FieldValidator {
+	return f.apply(func() {
+		s, ok := f.str()
+		if !ok {
+			return
+		}
+		urlRegex := `^https?://[^\s/$.?#].[^\s]*$`
+		if matched, err := regexp.MatchString(urlRegex, s); err != nil || !matched {
+			f.fail("must be a valid URL")
+		}
+	})
+}
+
+func (f *FieldValidator) Matches(pattern string) *FieldValidator {
+	return f.apply(func() {
+		s, ok := f.str()
+		if !ok {
+			return
+		}
+		matched, err := regexp.MatchString(pattern, s)
+		if err != nil {
+			f.fail("invalid pattern")
+			return
+		}
+		if !matched {
+			f.fail("does not match required format")
+		}
+	})
+}
+
+// In requires the value to equal one of the allowed values, which must be comparable.
+func (f *FieldValidator) In(allowed ...any) *FieldValidator {
+	return f.apply(func() {
+		if !slices.Contains(allowed, f.value) {
+			parts := make([]string, len(allowed))
+			for i, a := range allowed {
+				parts[i] = fmt.Sprint(a)
+			}
+			f.fail(fmt.Sprintf("must be one of: %s", strings.Join(parts, ", ")))
+		}
+	})
+}
+
+func (f *FieldValidator) Contains(substr string) *FieldValidator {
+	return f.apply(func() {
+		if s, ok := f.str(); ok && !strings.Contains(s, substr) {
+			f.fail(fmt.Sprintf("must contain '%s'", substr))
+		}
+	})
+}
+
+func (f *FieldValidator) ContainsAny(chars string) *FieldValidator {
+	return f.apply(func() {
+		if s, ok := f.str(); ok && !strings.ContainsAny(s, chars) {
+			f.fail(fmt.Sprintf("must contain at least one of: %s", chars))
+		}
+	})
+}
+
+func (f *FieldValidator) NotContains(substr string) *FieldValidator {
+	return f.apply(func() {
+		if s, ok := f.str(); ok && strings.Contains(s, substr) {
+			f.fail(fmt.Sprintf("must not contain '%s'", substr))
+		}
+	})
+}
+
+func (f *FieldValidator) Object() *FieldValidator {
+	return f.apply(func() {
+		if _, ok := f.value.(map[string]any); !ok {
+			f.fail("must be an object")
+		}
+	})
+}
+
+// Time requires the value to be a string parseable with the given layout.
+func (f *FieldValidator) Time(layout string) *FieldValidator {
+	return f.apply(func() {
+		if s, ok := f.str(); ok {
+			if _, err := time.Parse(layout, s); err != nil {
+				f.fail("must be a valid timestamp")
+			}
+		}
+	})
+}
+
+// Custom runs fn with the field value and full body.
+// If fn returns an error, its message is used as-is.
+func (f *FieldValidator) Custom(fn func(value any, data map[string]any) error) *FieldValidator {
+	return f.apply(func() {
+		if err := fn(f.value, f.v.data); err != nil {
+			f.v.errors.Add(f.field, err.Error(), false)
+		}
+	})
+}
+
+// ValidateJSON validates the parsed JSON body from request context.
+// On validation failure, it writes an error response and returns nil.
+func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) map[string]any {
 	body := GetJSONBody(r)
 
 	if len(body) == 0 || body == nil {
@@ -191,7 +320,8 @@ func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, 
 	}
 
 	v := NewValidator()
-	validateFunc(v, body)
+	v.data = body
+	validateFunc(v)
 
 	if err := v.Validate(); err != nil {
 		responder.Error(w, r, NewLimenError(err.Error(), http.StatusUnprocessableEntity, nil))
@@ -199,4 +329,31 @@ func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, 
 	}
 
 	return body
+}
+
+// BindAndValidate validates the JSON body and, on success, marshals it into a new *T.
+func BindAndValidate[T any](w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) *T {
+	body := ValidateJSON(w, r, responder, validateFunc)
+	if body == nil {
+		return nil
+	}
+
+	out, err := mapToStruct[T](body)
+	if err != nil {
+		responder.Error(w, r, NewLimenError(err.Error(), http.StatusUnprocessableEntity, nil))
+		return nil
+	}
+	return &out
+}
+
+func mapToStruct[T any](m map[string]any) (T, error) {
+	var out T
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return out, err
+	}
+	return out, nil
 }

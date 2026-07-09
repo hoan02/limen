@@ -83,8 +83,8 @@ func (h *limenHandlers) RevokeAllSessions(w http.ResponseWriter, r *http.Request
 }
 
 func (h *limenHandlers) VerifyEmail(w http.ResponseWriter, r *http.Request) {
-	body := ValidateJSON(w, r, h.responder, func(v *Validator, data map[string]any) *Validator {
-		return v.RequiredString("token", data["token"])
+	body := ValidateJSON(w, r, h.responder, func(v *Validator) {
+		v.Field("token").Required()
 	})
 	if body == nil {
 		return
