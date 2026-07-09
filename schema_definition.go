@@ -107,6 +107,56 @@ func WithSchemaIDField(config *SchemaConfig) SchemaDefinitionOption {
 	}
 }
 
+func WithSchemaCreatedAtField() SchemaDefinitionOption {
+	return func(d *SchemaDefinition) {
+		d.Columns = append(d.Columns, ColumnDefinition{
+			Name:         string(SchemaCreatedAtField),
+			LogicalField: SchemaCreatedAtField,
+			Type:         ColumnTypeTime,
+			DefaultValue: string(DatabaseDefaultValueNow),
+			IsNullable:   false,
+			IsPrimaryKey: false,
+		})
+	}
+}
+
+func WithSchemaUpdatedAtField() SchemaDefinitionOption {
+	return func(d *SchemaDefinition) {
+		d.Columns = append(d.Columns, ColumnDefinition{
+			Name:         string(SchemaUpdatedAtField),
+			LogicalField: SchemaUpdatedAtField,
+			Type:         ColumnTypeTime,
+			DefaultValue: string(DatabaseDefaultValueNow),
+		})
+	}
+}
+
+func WithSchemaSoftDeleteField() SchemaDefinitionOption {
+	return func(d *SchemaDefinition) {
+		d.Columns = append(d.Columns, ColumnDefinition{
+			Name:         string(SchemaSoftDeleteField),
+			LogicalField: SchemaSoftDeleteField,
+			Type:         ColumnTypeTime,
+			IsNullable:   true,
+		})
+		d.Indexes = append(d.Indexes, IndexDefinition{
+			Name:    "idx_soft_deletes",
+			Columns: []SchemaField{SchemaSoftDeleteField},
+			Unique:  false,
+		})
+	}
+}
+
+func WithDateFields(hasSoftDelete bool) SchemaDefinitionOption {
+	return func(d *SchemaDefinition) {
+		WithSchemaCreatedAtField()(d)
+		WithSchemaUpdatedAtField()(d)
+		if hasSoftDelete {
+			WithSchemaSoftDeleteField()(d)
+		}
+	}
+}
+
 // WithSchemaField adds a field to the schema.
 // If the logical field name is not provided, it will be set to the name parameter.
 func WithSchemaField(name SchemaField, columnType ColumnType, opts ...ColumnDefinitionOption) SchemaDefinitionOption {
