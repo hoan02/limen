@@ -83,11 +83,10 @@ func (t *twoFactorPlugin) DisableTwoFactor(ctx context.Context, userID any, pass
 			return err
 		}
 
-		updatedUser := &UserWithTwoFactor{TwoFactorEnabled: false}
-
-		return t.core.UpdateRaw(ctx, t.userSchema, updatedUser, []limen.Where{
-			limen.Eq(t.userSchema.GetIDField(), userID),
-		}, false)
+		return t.core.Update(ctx, t.userSchema, map[limen.SchemaField]any{UserWithTwoFactorSchemaEnabledField: false},
+			[]limen.Where{
+				limen.Eq(t.userSchema.GetIDField(), userID),
+			})
 	})
 }
 
