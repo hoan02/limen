@@ -338,6 +338,64 @@ func TestTime(t *testing.T) {
 	}
 }
 
+func TestNumber(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   any
+		wantErr bool
+	}{
+		{"whole number", 3600.0, false},
+		{"fractional fails", 3600.5, true},
+		{"non-number fails", "3600", true},
+		{"absent skipped", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := runRule(tt.value, func(f *FieldValidator) { f.Optional().Number() })
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestNumberNormalizesAndBounds(t *testing.T) {
+	t.Parallel()
+
+	t.Run("normalizes to int64", func(t *testing.T) {
+		t.Parallel()
+
+		v := NewValidator()
+		v.data = map[string]any{"n": 3600.0}
+		v.Field("n").Number()
+		require.NoError(t, v.Validate())
+		assert.Equal(t, int64(3600), v.data["n"])
+	})
+
+	t.Run("min after normalization", func(t *testing.T) {
+		t.Parallel()
+
+		belowDay := runRule(3600.0, func(f *FieldValidator) { f.Number().Min(86400) })
+		assert.Error(t, belowDay)
+
+		exactlyDay := runRule(86400.0, func(f *FieldValidator) { f.Number().Min(86400) })
+		assert.NoError(t, exactlyDay)
+	})
+
+	t.Run("max", func(t *testing.T) {
+		t.Parallel()
+
+		err := runRule(99999999.0, func(f *FieldValidator) { f.Number().Max(7776000) })
+		assert.Error(t, err)
+	})
+}
+
 func TestChaining(t *testing.T) {
 	t.Parallel()
 

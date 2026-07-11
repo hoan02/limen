@@ -294,6 +294,66 @@ func (f *FieldValidator) Time(layout string) *FieldValidator {
 	})
 }
 
+func (f *FieldValidator) number() (float64, bool) {
+	switch n := f.value.(type) {
+	case float64:
+		return n, true
+	case int64:
+		return float64(n), true
+	default:
+		f.fail("must be a number")
+		f.skip = true
+		return 0, false
+	}
+}
+
+// Number requires a whole number and normalizes it to int64.
+func (f *FieldValidator) Number() *FieldValidator {
+	return f.apply(func() {
+		n, ok := f.number()
+		if !ok {
+			return
+		}
+		if n != float64(int64(n)) {
+			f.fail("must be a whole number")
+			return
+		}
+		f.value = int64(n)
+		f.v.data[f.field] = int64(n)
+	})
+}
+
+func (f *FieldValidator) Boolean() *FieldValidator {
+	return f.apply(func() {
+		truthyValues := []any{true, "true"}
+		falseyValues := []any{false, "false"}
+		if !slices.Contains(truthyValues, f.value) && !slices.Contains(falseyValues, f.value) {
+			f.fail("must be a boolean")
+			return
+		}
+		f.value = slices.Contains(truthyValues, f.value)
+		f.v.data[f.field] = f.value
+	})
+}
+
+// Min requires a number greater than or equal to min.
+func (f *FieldValidator) Min(min float64) *FieldValidator {
+	return f.apply(func() {
+		if n, ok := f.number(); ok && n < min {
+			f.fail(fmt.Sprintf("must be at least %v", min))
+		}
+	})
+}
+
+// Max requires a number less than or equal to max.
+func (f *FieldValidator) Max(max float64) *FieldValidator {
+	return f.apply(func() {
+		if n, ok := f.number(); ok && n > max {
+			f.fail(fmt.Sprintf("must be at most %v", max))
+		}
+	})
+}
+
 // Custom runs fn with the field value and full body.
 // If fn returns an error, its message is used as-is.
 func (f *FieldValidator) Custom(fn func(value any, data map[string]any) error) *FieldValidator {
