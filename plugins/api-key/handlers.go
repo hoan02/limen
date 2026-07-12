@@ -13,6 +13,8 @@ type apiKeyHandlers struct {
 	builder   *limen.RouteBuilder
 }
 
+const MaxExpiresIn = 6307200000 // 200 years in seconds 😒 why would you need a key that long?
+
 func newApiKeyHandlers(plugin *apiKeyPlugin, httpCore *limen.LimenHTTPCore) *apiKeyHandlers {
 	return &apiKeyHandlers{
 		plugin:    plugin,
@@ -28,7 +30,7 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		v.Field("profile").Optional(defaultProfile().ID).String().In(profileIDs)
 		v.Field("name").Required().String()
 		v.Field("permissions").Optional().Object()
-		v.Field("expires_in").Optional().Number().Min(5 * 60).Max(3600)
+		v.Field("expires_in").Optional().Number().Min(5 * 60).Max(MaxExpiresIn)
 	})
 
 	if body == nil {
@@ -107,4 +109,30 @@ func (h *apiKeyHandlers) Revoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.responder.JSON(w, r, http.StatusNoContent, nil)
+}
+
+func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
+	body := limen.BindAndValidate[ApiKeyRotateRequest](w, r, h.responder, func(v *limen.Validator) {
+		v.Field("expires_in").Nullable().Number().Min(5 * 60).Max(MaxExpiresIn)
+		v.Field("permissions").Optional().Object()
+		v.Field("all_permissions").Optional().Boolean()
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := limen.GetCurrentSessionFromCtx(r)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	result, err := h.plugin.Rotate(r.Context(), session.User, limen.GetParam(r, "id"), body)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, result)
 }

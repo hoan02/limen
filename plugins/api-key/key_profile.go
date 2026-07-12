@@ -25,11 +25,3 @@ func defaultProfile() Profile {
 func (p *Profile) HasRateLimit() bool {
 	return p.RateLimitMax > 0 && p.RateLimitWindow != nil
 }
-
-func (p *Profile) ExpiresAt(expiresIn *int64) *time.Time {
-	if expiresIn != nil {
-		expiresAt := time.Now().Add(time.Duration(*expiresIn) * time.Second)
-		return &expiresAt
-	}
-	return nil
-}

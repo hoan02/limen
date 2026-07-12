@@ -2,10 +2,10 @@ package apikey
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/thecodearcher/limen"
 )
@@ -52,6 +52,10 @@ func (p *apiKeyPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.SchemaIntr
 func (p *apiKeyPlugin) PluginHTTPConfig() limen.PluginHTTPConfig {
 	return limen.PluginHTTPConfig{
 		BasePath: "/api-keys",
+		RateLimitRules: []*limen.RateLimitRule{
+			limen.NewRateLimitRule("/", 5, 10*time.Second),
+			limen.NewRateLimitRule("/:id/rotate", 5, 10*time.Second),
+		},
 	}
 }
 
@@ -61,6 +65,7 @@ func (p *apiKeyPlugin) RegisterRoutes(httpCore *limen.LimenHTTPCore, routeBuilde
 	routeBuilder.ProtectedGET("/", "api-key-list", handlers.List)
 	routeBuilder.ProtectedPATCH("/:id", "api-key-update", handlers.Update)
 	routeBuilder.ProtectedDELETE("/:id", "api-key-revoke", handlers.Revoke)
+	routeBuilder.ProtectedPOST("/:id/rotate", "api-key-rotate", handlers.Rotate)
 }
 
 func (p *apiKeyPlugin) Initialize(core *limen.LimenCore) error {
@@ -80,7 +85,6 @@ func (p *apiKeyPlugin) RegisterPrincipalResolver(principalType PrincipalType, r 
 
 func (p *apiKeyPlugin) resolvePrincipalID(ctx context.Context, principalType PrincipalType, userID any) (principalID any, err error) {
 	resolver, ok := p.principalResolvers[principalType]
-	fmt.Printf("principalResolvers: %v, principalType: %v, resolver: %v, ok: %v\n", p.principalResolvers, principalType, resolver, ok)
 	if !ok {
 		return nil, limen.NewLimenError("principal resolver not found", http.StatusInternalServerError, nil)
 	}

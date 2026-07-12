@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"slices"
+	"time"
 
 	"github.com/thecodearcher/limen"
 )
@@ -18,6 +19,12 @@ type ApiKeyCreateRequest struct {
 
 type ApiKeyUpdateRequest struct {
 	Name           string      `json:"name"`
+	Permissions    Permissions `json:"permissions,omitempty"`
+	AllPermissions bool        `json:"all_permissions,omitempty"`
+}
+
+type ApiKeyRotateRequest struct {
+	ExpiresIn      *int64      `json:"expires_in,omitempty"`
 	Permissions    Permissions `json:"permissions,omitempty"`
 	AllPermissions bool        `json:"all_permissions,omitempty"`
 }
@@ -49,7 +56,7 @@ func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKey
 		Name:            req.Name,
 		CreatedByUserID: user.ID,
 		Permissions:     permissions,
-		ExpiresAt:       profile.ExpiresAt(req.ExpiresIn),
+		ExpiresAt:       resolveExpiresAt(req.ExpiresIn),
 		Prefix:          &profile.Prefix,
 		Enabled:         true,
 		KeyHash:         p.hashAPIKey(key),
@@ -143,11 +150,7 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 		payload[APIKeySchemaNameField] = req.Name
 	}
 
-	if req.AllPermissions {
-		payload[APIKeySchemaPermissionsField] = profile.DefaultPermissions
-	}
-
-	if len(req.Permissions) > 0 {
+	if req.AllPermissions || len(req.Permissions) > 0 {
 		permissions, err := p.resolvePermissions(ctx, profile, user, req.Permissions)
 		if err != nil {
 			return nil, err
@@ -171,7 +174,6 @@ func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile,
 	if err != nil {
 		return nil, err
 	}
-
 	if len(customPermissions) > 0 {
 		return clampPermissions(customPermissions, grantablePermissions), nil
 	}
@@ -211,6 +213,51 @@ func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId an
 	})
 }
 
+func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId any, req *ApiKeyRotateRequest) (*ApiKeyCreateResult, error) {
+	apiKeyModel, err := p.core.FindOne(ctx, p.apiKeySchema, []limen.Where{
+		limen.Eq(p.apiKeySchema.GetIDField(), apiKeyId),
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+	apiKey := apiKeyModel.(*ApiKey)
+
+	profile, err := p.GetProfile(apiKey.Profile)
+	if err != nil {
+		return nil, err
+	}
+
+	expiresAt := resolveExpiresAt(req.ExpiresIn)
+	newKey := p.generateAPIKey(profile)
+	newKeyHash := p.hashAPIKey(newKey)
+	payload := map[limen.SchemaField]any{
+		APIKeySchemaKeyHashField:   newKeyHash,
+		APIKeySchemaExpiresAtField: expiresAt,
+		APIKeySchemaLast4Field:     newKey[len(newKey)-4:],
+		APIKeySchemaEnabledField:   true,
+	}
+
+	if req.AllPermissions || len(req.Permissions) > 0 {
+		permissions, err := p.resolvePermissions(ctx, profile, user, req.Permissions)
+		if err != nil {
+			return nil, err
+		}
+		payload[APIKeySchemaPermissionsField] = permissions
+	}
+
+	rotatedApiKey, err := p.core.UpdateAndReturn(ctx, p.apiKeySchema, payload, []limen.Where{
+		limen.Eq(p.apiKeySchema.GetIDField(), apiKeyId),
+	}, apiKeyId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ApiKeyCreateResult{
+		Key:    newKey,
+		ApiKey: rotatedApiKey.(*ApiKey),
+	}, nil
+}
+
 func intersectPerms(selected, allowed []string) []string {
 	var out []string
 	for _, perm := range selected {
@@ -233,4 +280,12 @@ func clampPermissions(selected, grantable Permissions) Permissions {
 		}
 	}
 	return out
+}
+
+func resolveExpiresAt(expiresIn *int64) *time.Time {
+	if expiresIn != nil {
+		expiresAt := time.Now().Add(time.Duration(*expiresIn) * time.Second)
+		return &expiresAt
+	}
+	return nil
 }
