@@ -364,6 +364,24 @@ func (f *FieldValidator) Custom(fn func(value any, data map[string]any) error) *
 	})
 }
 
+// Nullable ensures the field is present and allows null values.
+func (f *FieldValidator) Nullable() *FieldValidator {
+	return f.apply(func() {
+		_, ok := f.v.data[f.field]
+
+		if !ok {
+			f.fail("must be present")
+			f.skip = true
+			return
+		}
+
+		if f.value == nil {
+			f.skip = true
+			return
+		}
+	})
+}
+
 // ValidateJSON validates the parsed JSON body from request context.
 // On validation failure, it writes an error response and returns nil.
 func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) map[string]any {
