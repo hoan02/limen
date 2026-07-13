@@ -122,13 +122,40 @@ func (a *testMemoryAdapter) Update(_ context.Context, tableName SchemaTableName,
 
 	tbl := a.table(tableName)
 	for _, row := range tbl.rows {
-		if testMatchesConditions(row, conditions) {
-			for k, v := range updates {
-				row[k] = testDerefPointer(v)
+		if !testMatchesConditions(row, conditions) {
+			continue
+		}
+		for column, value := range updates {
+			arithmeticUpdate, ok := value.(ArithmeticUpdate)
+			if !ok {
+				row[column] = testDerefPointer(value)
+				continue
 			}
+
+			updated, err := testApplyArithmeticUpdate(row[column], arithmeticUpdate)
+			if err != nil {
+				return fmt.Errorf("update column %q: %w", column, err)
+			}
+			row[column] = updated
 		}
 	}
 	return nil
+}
+
+func testApplyArithmeticUpdate(current any, update ArithmeticUpdate) (any, error) {
+	if err := update.Validate(); err != nil {
+		return nil, err
+	}
+	delta := update.Value()
+	switch value := testDerefPointer(current).(type) {
+	case int:
+		return value + int(delta), nil
+	case int32:
+		return value + int32(delta), nil
+	case int64:
+		return value + delta, nil
+	}
+	return nil, fmt.Errorf("cannot apply arithmetic update to %T", current)
 }
 
 func (a *testMemoryAdapter) Delete(_ context.Context, tableName SchemaTableName, conditions []Where) error {
@@ -169,24 +196,30 @@ func (a *testMemoryAdapter) Count(_ context.Context, tableName SchemaTableName, 
 	return count, nil
 }
 
-// testDerefPointer flattens pointer types that ToStorage produces (*string,
-// *time.Time) into plain values so FromStorage type assertions match real SQL
-// driver behavior.
+// testDerefPointer flattens pointer values produced by ToStorage so the
+// in-memory adapter behaves like a database driver.
 func testDerefPointer(v any) any {
 	switch p := v.(type) {
 	case *string:
-		if p == nil {
-			return nil
-		}
-		return *p
+		return testDereference(p)
 	case *time.Time:
-		if p == nil {
-			return nil
-		}
-		return *p
+		return testDereference(p)
+	case *int:
+		return testDereference(p)
+	case *int32:
+		return testDereference(p)
+	case *int64:
+		return testDereference(p)
 	default:
 		return v
 	}
+}
+
+func testDereference[T any](value *T) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 // ---------------------------------------------------------------------------

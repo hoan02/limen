@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/thecodearcher/limen"
 )
@@ -105,10 +106,42 @@ func (a *Adapter) FindMany(ctx context.Context, tableName limen.SchemaTableName,
 }
 
 func (a *Adapter) Update(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where, updates map[string]any) error {
+	payload, err := buildUpdatePayload(updates)
+	if err != nil {
+		return err
+	}
+
 	db := a.getDB()
 	query := db.WithContext(ctx).Table(string(tableName))
 	query = a.applyConditions(query, conditions)
-	return query.Updates(updates).Error
+	return query.Updates(payload).Error
+}
+
+func buildUpdatePayload(updates map[string]any) (map[string]any, error) {
+	payload := make(map[string]any, len(updates))
+	for column, value := range updates {
+		update, ok := value.(limen.ArithmeticUpdate)
+		if !ok {
+			payload[column] = value
+			continue
+		}
+		if err := update.Validate(); err != nil {
+			return nil, fmt.Errorf("update column %q: %w", column, err)
+		}
+
+		operator := "+"
+		amount := update.Value()
+		if amount < 0 {
+			operator = "-"
+			amount = -amount
+		}
+		payload[column] = gorm.Expr(
+			"? "+operator+" ?",
+			clause.Column{Name: column},
+			amount,
+		)
+	}
+	return payload, nil
 }
 
 func (a *Adapter) Delete(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) error {

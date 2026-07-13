@@ -115,8 +115,12 @@ func (a *Adapter) Update(ctx context.Context, tableName limen.SchemaTableName, c
 	setParts := make([]string, 0, len(updates))
 	setArgs := make([]any, 0, len(updates))
 	for _, k := range sortedKeys(updates) {
-		setParts = append(setParts, a.quoteIdent(k)+" = ?")
-		setArgs = append(setArgs, updates[k])
+		part, arg, err := a.buildUpdateAssignment(k, updates[k])
+		if err != nil {
+			return err
+		}
+		setParts = append(setParts, part)
+		setArgs = append(setArgs, arg)
 	}
 	whereSQL, whereArgs := a.buildWhere(conditions)
 	args := append(setArgs, whereArgs...)
@@ -124,6 +128,23 @@ func (a *Adapter) Update(ctx context.Context, tableName limen.SchemaTableName, c
 	query = a.rebind(query)
 	_, err := a.getExt().ExecContext(ctx, query, args...)
 	return err
+}
+
+func (a *Adapter) buildUpdateAssignment(column string, value any) (string, any, error) {
+	quotedColumn := a.quoteIdent(column)
+	update, ok := value.(limen.ArithmeticUpdate)
+	if !ok {
+		return quotedColumn + " = ?", value, nil
+	}
+	if err := update.Validate(); err != nil {
+		return "", nil, fmt.Errorf("update column %q: %w", column, err)
+	}
+
+	delta := update.Value()
+	if delta < 0 {
+		return quotedColumn + " = " + quotedColumn + " - ?", -delta, nil
+	}
+	return quotedColumn + " = " + quotedColumn + " + ?", delta, nil
 }
 
 func (a *Adapter) Delete(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) error {

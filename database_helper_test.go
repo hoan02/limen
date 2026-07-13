@@ -259,6 +259,73 @@ func TestDatabaseHelper_UpdateAndReturn(t *testing.T) {
 	assert.Equal(t, "returned@test.com", returned.(*User).Email)
 }
 
+func seedRateLimitRow(t *testing.T, l *Limen, key string, count int32, lastRequestAt int64) {
+	t.Helper()
+
+	schema := l.core.Schema.RateLimit
+	err := l.core.db.Create(t.Context(), schema.GetTableName(), map[string]any{
+		schema.GetKeyField():           key,
+		schema.GetCountField():         count,
+		schema.GetLastRequestAtField(): lastRequestAt,
+	})
+	require.NoError(t, err)
+}
+
+func TestDatabaseHelper_Update_MixesArithmeticAndAssignments(t *testing.T) {
+	t.Parallel()
+
+	l := newTestLimen(t)
+	schema := l.core.Schema.RateLimit
+	seedRateLimitRow(t, l, "mixed-update", 4, 100)
+
+	err := l.core.Update(t.Context(), schema, map[SchemaField]any{
+		RateLimitSchemaCountField:         IncrementBy(3),
+		RateLimitSchemaLastRequestAtField: int64(200),
+	}, []Where{
+		Eq(schema.GetKeyField(), "mixed-update"),
+	})
+	require.NoError(t, err)
+
+	found, err := l.core.FindOne(t.Context(), schema, []Where{
+		Eq(schema.GetKeyField(), "mixed-update"),
+	}, nil)
+	require.NoError(t, err)
+
+	rateLimit := found.(*RateLimit)
+	assert.Equal(t, 7, rateLimit.Count)
+	assert.Equal(t, int64(200), rateLimit.LastRequestAt)
+}
+
+func TestDatabaseHelper_Update_RejectsInvalidArithmeticAmount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		update ArithmeticUpdate
+	}{
+		{name: "zero increment", update: IncrementBy(0)},
+		{name: "negative increment", update: IncrementBy(-1)},
+		{name: "zero decrement", update: DecrementBy(0)},
+		{name: "negative decrement", update: DecrementBy(-1)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := newTestLimen(t)
+			schema := l.core.Schema.RateLimit
+			err := l.core.Update(t.Context(), schema, map[SchemaField]any{
+				RateLimitSchemaCountField: tt.update,
+			}, []Where{
+				Eq(schema.GetKeyField(), "missing"),
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "amount must be greater than zero")
+		})
+	}
+}
+
 func TestDatabaseHelper_FindMany(t *testing.T) {
 	t.Parallel()
 

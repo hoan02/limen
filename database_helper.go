@@ -130,6 +130,9 @@ func (core *LimenCore) Update(ctx context.Context, schema Schema, data any, cond
 	if len(payload) == 0 {
 		return nil
 	}
+	if err := validateUpdatePayload(payload); err != nil {
+		return err
+	}
 
 	applyUpdatedAtTimestamp(schema, payload, false)
 
@@ -173,6 +176,19 @@ func buildUpdatePayload(schema Schema, data any) (map[string]any, error) {
 	default:
 		return nil, fmt.Errorf("Update: unsupported data type %T, want limen.Model or map[limen.SchemaField]any", data)
 	}
+}
+
+func validateUpdatePayload(payload map[string]any) error {
+	for column, value := range payload {
+		update, ok := value.(ArithmeticUpdate)
+		if !ok {
+			continue
+		}
+		if err := update.Validate(); err != nil {
+			return fmt.Errorf("Update: invalid arithmetic update for column %q: %w", column, err)
+		}
+	}
+	return nil
 }
 
 func (core *LimenCore) assignID(ctx context.Context, schema Schema, payload map[string]any) error {

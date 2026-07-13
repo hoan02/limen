@@ -3,9 +3,11 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/thecodearcher/limen"
 
@@ -19,6 +21,7 @@ func setupTestDB(t *testing.T) *Adapter {
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS "test_items" (
@@ -134,6 +137,75 @@ func TestUpdate(t *testing.T) {
 
 	result, _ := adapter.FindOne(ctx, "test_items", []limen.Where{limen.Eq("name", "Alice")}, nil)
 	assert.Equal(t, "new@test.com", result["email"])
+}
+
+func TestUpdate_MixesArithmeticAndAssignments(t *testing.T) {
+	t.Parallel()
+
+	adapter := setupTestDB(t)
+	ctx := t.Context()
+	require.NoError(t, adapter.Create(ctx, "test_items", map[string]any{
+		"name":   "Alice",
+		"age":    10,
+		"status": "active",
+	}))
+
+	err := adapter.Update(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "Alice"),
+	}, map[string]any{
+		"age":    limen.IncrementBy(5),
+		"status": "updated",
+	})
+	require.NoError(t, err)
+
+	err = adapter.Update(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "Alice"),
+	}, map[string]any{
+		"age": limen.DecrementBy(3),
+	})
+	require.NoError(t, err)
+
+	result, err := adapter.FindOne(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "Alice"),
+	}, nil)
+	require.NoError(t, err)
+	assert.EqualValues(t, 12, result["age"])
+	assert.Equal(t, "updated", result["status"])
+}
+
+func TestUpdate_ConcurrentIncrements(t *testing.T) {
+	t.Parallel()
+
+	adapter := setupTestDB(t)
+	ctx := t.Context()
+	require.NoError(t, adapter.Create(ctx, "test_items", map[string]any{
+		"name": "counter",
+		"age":  0,
+	}))
+
+	const increments = 50
+	var wg sync.WaitGroup
+	errs := make(chan error, increments)
+	for range increments {
+		wg.Go(func() {
+			errs <- adapter.Update(ctx, "test_items", []limen.Where{
+				limen.Eq("name", "counter"),
+			}, map[string]any{
+				"age": limen.IncrementBy(1),
+			})
+		})
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	result, err := adapter.FindOne(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "counter"),
+	}, nil)
+	require.NoError(t, err)
+	assert.EqualValues(t, increments, result["age"])
 }
 
 func TestDelete(t *testing.T) {
