@@ -67,9 +67,14 @@ func (core *LimenCore) buildCreatePayload(ctx context.Context, schema Schema, da
 }
 
 func (core *LimenCore) Create(ctx context.Context, schema Schema, data Model, additionalFields map[string]any) error {
+	_, err := core.CreateWithResult(ctx, schema, data, additionalFields)
+	return err
+}
+
+func (core *LimenCore) CreateWithResult(ctx context.Context, schema Schema, data Model, additionalFields map[string]any) (DatabaseResult, error) {
 	payload, err := core.buildCreatePayload(ctx, schema, data, additionalFields)
 	if err != nil {
-		return err
+		return DatabaseResult{}, err
 	}
 
 	db := core.getDB(ctx)
@@ -88,7 +93,7 @@ func (core *LimenCore) CreateAndReturn(ctx context.Context, schema Schema, data 
 	}
 
 	db := core.getDB(ctx)
-	if err := db.Create(ctx, schema.GetTableName(), payload); err != nil {
+	if _, err := db.Create(ctx, schema.GetTableName(), payload); err != nil {
 		return nil, err
 	}
 
@@ -119,19 +124,24 @@ func ParseVerificationAction(action string) (string, string) {
 // Update changes matching rows. Use Model for patch-style updates,
 // or map[SchemaField]any when you need exact column control.
 func (core *LimenCore) Update(ctx context.Context, schema Schema, data any, conditions []Where) error {
+	_, err := core.UpdateWithResult(ctx, schema, data, conditions)
+	return err
+}
+
+func (core *LimenCore) UpdateWithResult(ctx context.Context, schema Schema, data any, conditions []Where) (DatabaseResult, error) {
 	if len(conditions) == 0 {
-		return fmt.Errorf("%w: conditions required to prevent accidental table-wide update", ErrMissingConditions)
+		return DatabaseResult{}, fmt.Errorf("%w: conditions required to prevent accidental table-wide update", ErrMissingConditions)
 	}
 
 	payload, err := buildUpdatePayload(schema, data)
 	if err != nil {
-		return err
+		return DatabaseResult{}, err
 	}
 	if len(payload) == 0 {
-		return nil
+		return DatabaseResult{}, nil
 	}
 	if err := validateUpdatePayload(payload); err != nil {
-		return err
+		return DatabaseResult{}, err
 	}
 
 	applyUpdatedAtTimestamp(schema, payload, false)
@@ -240,21 +250,22 @@ func applySoftDeleteFilter(schema Schema, conditions []Where) []Where {
 }
 
 func (core *LimenCore) Delete(ctx context.Context, schema Schema, conditions []Where) error {
+	_, err := core.DeleteWithResult(ctx, schema, conditions)
+	return err
+}
+
+func (core *LimenCore) DeleteWithResult(ctx context.Context, schema Schema, conditions []Where) (DatabaseResult, error) {
 	if len(conditions) == 0 {
-		return fmt.Errorf("%w: conditions required to prevent accidental table-wide delete", ErrMissingConditions)
+		return DatabaseResult{}, fmt.Errorf("%w: conditions required to prevent accidental table-wide delete", ErrMissingConditions)
 	}
 
 	db := core.getDB(ctx)
 	// if there are conditions, we update the soft delete field to the current time
 	// otherwise we delete the record directly
 	if schema.GetSoftDeleteField() != "" {
-		if err := db.Update(ctx, schema.GetTableName(), conditions, map[string]any{
+		return db.Update(ctx, schema.GetTableName(), conditions, map[string]any{
 			schema.GetSoftDeleteField(): time.Now(),
-		}); err != nil {
-			return err
-		}
-
-		return nil
+		})
 	}
 
 	return db.Delete(ctx, schema.GetTableName(), conditions)

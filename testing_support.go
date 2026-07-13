@@ -46,12 +46,12 @@ func (a *testMemoryAdapter) table(name SchemaTableName) *testMemTable {
 	return t
 }
 
-func (a *testMemoryAdapter) Create(_ context.Context, tableName SchemaTableName, data map[string]any) error {
+func (a *testMemoryAdapter) Create(_ context.Context, tableName SchemaTableName, data map[string]any) (DatabaseResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if len(data) == 0 {
-		return fmt.Errorf("no data to insert")
+		return DatabaseResult{}, fmt.Errorf("no data to insert")
 	}
 
 	tbl := a.table(tableName)
@@ -67,7 +67,7 @@ func (a *testMemoryAdapter) Create(_ context.Context, tableName SchemaTableName,
 	}
 
 	tbl.rows = append(tbl.rows, row)
-	return nil
+	return DatabaseResult{RowsAffected: 1}, nil
 }
 
 func (a *testMemoryAdapter) FindOne(_ context.Context, tableName SchemaTableName, conditions []Where, orderBy []OrderBy) (map[string]any, error) {
@@ -112,15 +112,16 @@ func (a *testMemoryAdapter) FindMany(_ context.Context, tableName SchemaTableNam
 	return results, nil
 }
 
-func (a *testMemoryAdapter) Update(_ context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) error {
+func (a *testMemoryAdapter) Update(_ context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) (DatabaseResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if len(updates) == 0 {
-		return nil
+		return DatabaseResult{}, nil
 	}
 
 	tbl := a.table(tableName)
+	var rowsAffected int64
 	for _, row := range tbl.rows {
 		if !testMatchesConditions(row, conditions) {
 			continue
@@ -134,12 +135,13 @@ func (a *testMemoryAdapter) Update(_ context.Context, tableName SchemaTableName,
 
 			updated, err := testApplyArithmeticUpdate(row[column], arithmeticUpdate)
 			if err != nil {
-				return fmt.Errorf("update column %q: %w", column, err)
+				return DatabaseResult{}, fmt.Errorf("update column %q: %w", column, err)
 			}
 			row[column] = updated
 		}
+		rowsAffected++
 	}
-	return nil
+	return DatabaseResult{RowsAffected: rowsAffected}, nil
 }
 
 func testApplyArithmeticUpdate(current any, update ArithmeticUpdate) (any, error) {
@@ -158,15 +160,16 @@ func testApplyArithmeticUpdate(current any, update ArithmeticUpdate) (any, error
 	return nil, fmt.Errorf("cannot apply arithmetic update to %T", current)
 }
 
-func (a *testMemoryAdapter) Delete(_ context.Context, tableName SchemaTableName, conditions []Where) error {
+func (a *testMemoryAdapter) Delete(_ context.Context, tableName SchemaTableName, conditions []Where) (DatabaseResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	tbl := a.table(tableName)
+	before := len(tbl.rows)
 	tbl.rows = slices.DeleteFunc(tbl.rows, func(row map[string]any) bool {
 		return testMatchesConditions(row, conditions)
 	})
-	return nil
+	return DatabaseResult{RowsAffected: int64(before - len(tbl.rows))}, nil
 }
 
 func (a *testMemoryAdapter) Exists(_ context.Context, tableName SchemaTableName, conditions []Where) (bool, error) {

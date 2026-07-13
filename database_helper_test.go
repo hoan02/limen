@@ -263,7 +263,7 @@ func seedRateLimitRow(t *testing.T, l *Limen, key string, count int32, lastReque
 	t.Helper()
 
 	schema := l.core.Schema.RateLimit
-	err := l.core.db.Create(t.Context(), schema.GetTableName(), map[string]any{
+	_, err := l.core.db.Create(t.Context(), schema.GetTableName(), map[string]any{
 		schema.GetKeyField():           key,
 		schema.GetCountField():         count,
 		schema.GetLastRequestAtField(): lastRequestAt,

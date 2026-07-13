@@ -44,12 +44,13 @@ func TestCreate_And_FindOne(t *testing.T) {
 	adapter := setupTestDB(t)
 	ctx := context.Background()
 
-	err := adapter.Create(ctx, "test_items", map[string]any{
+	dbResult, err := adapter.Create(ctx, "test_items", map[string]any{
 		"name":  "Alice",
 		"email": "alice@example.com",
 		"age":   30,
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	result, err := adapter.FindOne(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
@@ -78,7 +79,7 @@ func TestFindMany(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"Alice", "Bob", "Charlie"} {
-		err := adapter.Create(ctx, "test_items", map[string]any{"name": name, "email": name + "@test.com"})
+		_, err := adapter.Create(ctx, "test_items", map[string]any{"name": name, "email": name + "@test.com"})
 		assert.NoError(t, err)
 	}
 
@@ -130,10 +131,11 @@ func TestUpdate(t *testing.T) {
 
 	adapter.Create(ctx, "test_items", map[string]any{"name": "Alice", "email": "old@test.com"})
 
-	err := adapter.Update(ctx, "test_items", []limen.Where{
+	dbResult, err := adapter.Update(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
 	}, map[string]any{"email": "new@test.com"})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	result, _ := adapter.FindOne(ctx, "test_items", []limen.Where{limen.Eq("name", "Alice")}, nil)
 	assert.Equal(t, "new@test.com", result["email"])
@@ -144,13 +146,14 @@ func TestUpdate_MixesArithmeticAndAssignments(t *testing.T) {
 
 	adapter := setupTestDB(t)
 	ctx := t.Context()
-	require.NoError(t, adapter.Create(ctx, "test_items", map[string]any{
+	_, err := adapter.Create(ctx, "test_items", map[string]any{
 		"name":   "Alice",
 		"age":    10,
 		"status": "active",
-	}))
+	})
+	require.NoError(t, err)
 
-	err := adapter.Update(ctx, "test_items", []limen.Where{
+	_, err = adapter.Update(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
 	}, map[string]any{
 		"age":    limen.IncrementBy(5),
@@ -158,7 +161,7 @@ func TestUpdate_MixesArithmeticAndAssignments(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapter.Update(ctx, "test_items", []limen.Where{
+	_, err = adapter.Update(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
 	}, map[string]any{
 		"age": limen.DecrementBy(3),
@@ -178,21 +181,23 @@ func TestUpdate_ConcurrentIncrements(t *testing.T) {
 
 	adapter := setupTestDB(t)
 	ctx := t.Context()
-	require.NoError(t, adapter.Create(ctx, "test_items", map[string]any{
+	_, err := adapter.Create(ctx, "test_items", map[string]any{
 		"name": "counter",
 		"age":  0,
-	}))
+	})
+	require.NoError(t, err)
 
 	const increments = 50
 	var wg sync.WaitGroup
 	errs := make(chan error, increments)
 	for range increments {
 		wg.Go(func() {
-			errs <- adapter.Update(ctx, "test_items", []limen.Where{
+			_, err := adapter.Update(ctx, "test_items", []limen.Where{
 				limen.Eq("name", "counter"),
 			}, map[string]any{
 				"age": limen.IncrementBy(1),
 			})
+			errs <- err
 		})
 	}
 	wg.Wait()
@@ -216,10 +221,11 @@ func TestDelete(t *testing.T) {
 
 	adapter.Create(ctx, "test_items", map[string]any{"name": "ToDelete"})
 
-	err := adapter.Delete(ctx, "test_items", []limen.Where{
+	dbResult, err := adapter.Delete(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "ToDelete"),
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	_, err = adapter.FindOne(ctx, "test_items", []limen.Where{limen.Eq("name", "ToDelete")}, nil)
 	assert.ErrorIs(t, err, limen.ErrRecordNotFound)
@@ -271,7 +277,7 @@ func TestTransaction_Commit(t *testing.T) {
 	assert.NoError(t, err)
 
 	txAdapter := tx.(*Adapter)
-	err = txAdapter.Create(ctx, "test_items", map[string]any{"name": "InTx"})
+	_, err = txAdapter.Create(ctx, "test_items", map[string]any{"name": "InTx"})
 	assert.NoError(t, err)
 
 	err = tx.Commit()
@@ -340,7 +346,7 @@ func TestUpdate_RequiresConditions(t *testing.T) {
 	adapter := setupTestDB(t)
 	ctx := context.Background()
 
-	err := adapter.Update(ctx, "test_items", nil, map[string]any{"name": "bad"})
+	_, err := adapter.Update(ctx, "test_items", nil, map[string]any{"name": "bad"})
 	assert.Error(t, err)
 }
 
@@ -350,6 +356,6 @@ func TestDelete_RequiresConditions(t *testing.T) {
 	adapter := setupTestDB(t)
 	ctx := context.Background()
 
-	err := adapter.Delete(ctx, "test_items", nil)
+	_, err := adapter.Delete(ctx, "test_items", nil)
 	assert.Error(t, err)
 }

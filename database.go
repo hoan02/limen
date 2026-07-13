@@ -6,12 +6,17 @@ import (
 	"strings"
 )
 
+// DatabaseResult reports the outcome of a database write operation.
+type DatabaseResult struct {
+	RowsAffected int64
+}
+
 type DatabaseAdapter interface {
-	Create(ctx context.Context, tableName SchemaTableName, data map[string]any) error
+	Create(ctx context.Context, tableName SchemaTableName, data map[string]any) (DatabaseResult, error)
 	FindOne(ctx context.Context, tableName SchemaTableName, conditions []Where, orderBy []OrderBy) (map[string]any, error)
 	FindMany(ctx context.Context, tableName SchemaTableName, conditions []Where, options *QueryOptions) ([]map[string]any, error)
-	Update(ctx context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) error
-	Delete(ctx context.Context, tableName SchemaTableName, conditions []Where) error
+	Update(ctx context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) (DatabaseResult, error)
+	Delete(ctx context.Context, tableName SchemaTableName, conditions []Where) (DatabaseResult, error)
 	Exists(ctx context.Context, tableName SchemaTableName, conditions []Where) (bool, error)
 	Count(ctx context.Context, tableName SchemaTableName, conditions []Where) (int64, error)
 }

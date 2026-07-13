@@ -43,12 +43,13 @@ func TestGorm_Create_And_FindOne(t *testing.T) {
 	adapter := setupTestGormDB(t)
 	ctx := context.Background()
 
-	err := adapter.Create(ctx, "test_items", map[string]any{
+	dbResult, err := adapter.Create(ctx, "test_items", map[string]any{
 		"name":  "Alice",
 		"email": "alice@example.com",
 		"age":   30,
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	result, err := adapter.FindOne(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
@@ -87,10 +88,11 @@ func TestGorm_Update(t *testing.T) {
 
 	adapter.Create(ctx, "test_items", map[string]any{"name": "Alice", "email": "old@test.com"})
 
-	err := adapter.Update(ctx, "test_items", []limen.Where{
+	dbResult, err := adapter.Update(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
 	}, map[string]any{"email": "new@test.com"})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	result, _ := adapter.FindOne(ctx, "test_items", []limen.Where{limen.Eq("name", "Alice")}, nil)
 	assert.Equal(t, "new@test.com", result["email"])
@@ -99,13 +101,14 @@ func TestGorm_Update(t *testing.T) {
 func TestGorm_Update_MixesArithmeticAndAssignments(t *testing.T) {
 	adapter := setupTestGormDB(t)
 	ctx := t.Context()
-	require.NoError(t, adapter.Create(ctx, "test_items", map[string]any{
+	_, err := adapter.Create(ctx, "test_items", map[string]any{
 		"name":   "Arithmetic",
 		"age":    10,
 		"status": "active",
-	}))
+	})
+	require.NoError(t, err)
 
-	err := adapter.Update(ctx, "test_items", []limen.Where{
+	_, err = adapter.Update(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Arithmetic"),
 	}, map[string]any{
 		"age":    limen.IncrementBy(5),
@@ -113,7 +116,7 @@ func TestGorm_Update_MixesArithmeticAndAssignments(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapter.Update(ctx, "test_items", []limen.Where{
+	_, err = adapter.Update(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Arithmetic"),
 	}, map[string]any{
 		"age": limen.DecrementBy(3),
@@ -131,21 +134,23 @@ func TestGorm_Update_MixesArithmeticAndAssignments(t *testing.T) {
 func TestGorm_Update_ConcurrentIncrements(t *testing.T) {
 	adapter := setupTestGormDB(t)
 	ctx := t.Context()
-	require.NoError(t, adapter.Create(ctx, "test_items", map[string]any{
+	_, err := adapter.Create(ctx, "test_items", map[string]any{
 		"name": "GormCounter",
 		"age":  0,
-	}))
+	})
+	require.NoError(t, err)
 
 	const increments = 50
 	var wg sync.WaitGroup
 	errs := make(chan error, increments)
 	for range increments {
 		wg.Go(func() {
-			errs <- adapter.Update(ctx, "test_items", []limen.Where{
+			_, err := adapter.Update(ctx, "test_items", []limen.Where{
 				limen.Eq("name", "GormCounter"),
 			}, map[string]any{
 				"age": limen.IncrementBy(1),
 			})
+			errs <- err
 		})
 	}
 	wg.Wait()
@@ -167,10 +172,11 @@ func TestGorm_Delete(t *testing.T) {
 
 	adapter.Create(ctx, "test_items", map[string]any{"name": "ToDelete"})
 
-	err := adapter.Delete(ctx, "test_items", []limen.Where{
+	dbResult, err := adapter.Delete(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "ToDelete"),
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	_, err = adapter.FindOne(ctx, "test_items", []limen.Where{limen.Eq("name", "ToDelete")}, nil)
 	assert.ErrorIs(t, err, limen.ErrRecordNotFound)
