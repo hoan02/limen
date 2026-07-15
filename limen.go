@@ -33,14 +33,15 @@ func New(config *Config) (*Limen, error) {
 	}
 
 	core := &LimenCore{
-		config:      config,
-		baseURL:     config.BaseURL,
-		fullBaseURL: joinURL(config.BaseURL, config.HTTP.basePath),
-		db:          config.Database,
-		cacheStore:  config.CacheStore,
-		Schema:      config.Schema,
-		plugins:     make(map[PluginName]Plugin),
-		secret:      config.Secret,
+		config:        config,
+		baseURL:       config.BaseURL,
+		fullBaseURL:   joinURL(config.BaseURL, config.HTTP.basePath),
+		db:            config.Database,
+		cacheStore:    config.CacheStore,
+		Schema:        config.Schema,
+		plugins:       make(map[PluginName]Plugin),
+		secret:        config.Secret,
+		AccessControl: config.AccessControl,
 	}
 
 	core.cookies = newCookieManager(config.HTTP.cookieConfig, config.Secret)

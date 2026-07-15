@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"github.com/thecodearcher/limen/access"
 )
 
 type LimenCore struct {
 	config         *Config
+	AccessControl  *access.AccessControl
 	baseURL        string
 	fullBaseURL    string // baseURL + HTTP.basePath
 	db             DatabaseAdapter
