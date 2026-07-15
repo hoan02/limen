@@ -22,6 +22,7 @@ func TestAPIKeyPlugin_Verify(t *testing.T) {
 		name                string
 		key                 string
 		permissions         access.Permissions
+		profiles            []Profile
 		prepare             func(t *testing.T, plugin *apiKeyPlugin, user *limen.User) string
 		expectedError       error
 		expectLastUsedAtSet bool
@@ -30,6 +31,20 @@ func TestAPIKeyPlugin_Verify(t *testing.T) {
 			name: "valid key",
 			prepare: func(t *testing.T, plugin *apiKeyPlugin, user *limen.User) string {
 				return createTestAPIKey(t, plugin, user, "default", nil, nil)
+			},
+			expectLastUsedAtSet: true,
+		},
+		{
+			name: "valid key with custom profile",
+			profiles: []Profile{
+				{
+					ID:            "service",
+					PrincipalType: PrincipalTypeUser,
+					Prefix:        "service_",
+				},
+			},
+			prepare: func(t *testing.T, plugin *apiKeyPlugin, user *limen.User) string {
+				return createTestAPIKey(t, plugin, user, "service", nil, nil)
 			},
 			expectLastUsedAtSet: true,
 		},
@@ -97,7 +112,7 @@ func TestAPIKeyPlugin_Verify(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			l, plugin := newTestAPIKeyPlugin(t)
+			l, plugin := newTestAPIKeyPlugin(t, tt.profiles...)
 			user := limen.SeedTestUser(t, l, tt.name+"@test.com")
 
 			key := tt.key
@@ -105,7 +120,7 @@ func TestAPIKeyPlugin_Verify(t *testing.T) {
 				key = tt.prepare(t, plugin, user)
 			}
 
-			got, err := plugin.Verify(t.Context(), key, &VerifyOptions{RequiredPermissions: tt.permissions, ProfileID: "default"})
+			got, err := plugin.Verify(t.Context(), key, tt.permissions)
 			if tt.expectedError != nil {
 				require.ErrorIs(t, err, tt.expectedError)
 				assert.Nil(t, got)
@@ -117,6 +132,51 @@ func TestAPIKeyPlugin_Verify(t *testing.T) {
 			if tt.expectLastUsedAtSet {
 				assert.NotNil(t, findTestAPIKey(t, plugin, key).LastUsedAt)
 			}
+		})
+	}
+}
+
+func TestAPIKeyPlugin_VerifyWithProfile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		profileID     string
+		expectedError error
+	}{
+		{
+			name:      "matching profile",
+			profileID: "service",
+		},
+		{
+			name:          "mismatched profile",
+			profileID:     "default",
+			expectedError: ErrInvalidAPIKey,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l, plugin := newTestAPIKeyPlugin(t, Profile{
+				ID:            "service",
+				PrincipalType: PrincipalTypeUser,
+				Prefix:        "service_",
+			})
+			user := limen.SeedTestUser(t, l, tt.name+"@test.com")
+			key := createTestAPIKey(t, plugin, user, "service", nil, nil)
+
+			got, err := plugin.VerifyWithProfile(t.Context(), key, nil, tt.profileID)
+			if tt.expectedError != nil {
+				require.ErrorIs(t, err, tt.expectedError)
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			assert.Equal(t, "service", got.Profile)
 		})
 	}
 }
@@ -237,7 +297,7 @@ func verifyConcurrently(t *testing.T, plugin *apiKeyPlugin, key string, requests
 	for range requests {
 		group.Go(func() {
 			<-start
-			_, err := plugin.Verify(context.Background(), key, &VerifyOptions{ProfileID: "default"})
+			_, err := plugin.Verify(context.Background(), key, access.Permissions{})
 			results <- err
 		})
 	}

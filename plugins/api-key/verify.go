@@ -10,7 +10,15 @@ import (
 	"github.com/thecodearcher/limen/access"
 )
 
-func (p *apiKeyPlugin) Verify(ctx context.Context, key string, opts *VerifyOptions) (*ApiKey, error) {
+func (p *apiKeyPlugin) Verify(ctx context.Context, key string, requiredPermissions access.Permissions) (*ApiKey, error) {
+	return p.validateApiKey(ctx, key, requiredPermissions, "")
+}
+
+func (p *apiKeyPlugin) VerifyWithProfile(ctx context.Context, key string, requiredPermissions access.Permissions, profileID string) (*ApiKey, error) {
+	return p.validateApiKey(ctx, key, requiredPermissions, profileID)
+}
+
+func (p *apiKeyPlugin) validateApiKey(ctx context.Context, key string, requiredPermissions access.Permissions, profileID string) (*ApiKey, error) {
 	keyHash := p.hashAPIKey(key)
 
 	apiKeyModel, err := p.core.FindOne(ctx, p.apiKeySchema, []limen.Where{
@@ -25,7 +33,7 @@ func (p *apiKeyPlugin) Verify(ctx context.Context, key string, opts *VerifyOptio
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
-	profile, err := p.resolveVerificationProfile(apiKey, opts.ProfileID)
+	profile, err := p.resolveVerificationProfile(apiKey, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -46,8 +54,8 @@ func (p *apiKeyPlugin) Verify(ctx context.Context, key string, opts *VerifyOptio
 		return nil, err
 	}
 
-	if opts.RequiredPermissions != nil {
-		if !access.HasRequiredPermissions(apiKey.Permissions, opts.RequiredPermissions) {
+	if len(requiredPermissions) > 0 {
+		if !access.HasRequiredPermissions(apiKey.Permissions, requiredPermissions) {
 			return nil, ErrInsufficientPermissions
 		}
 	}

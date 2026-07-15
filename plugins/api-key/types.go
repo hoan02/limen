@@ -46,11 +46,6 @@ type ApiKeyListFilter struct {
 	Status ApiKeyStatus `json:"status,omitempty"`
 }
 
-type VerifyOptions struct {
-	RequiredPermissions access.Permissions `json:"permissions,omitempty"`
-	ProfileID           string             `json:"profile,omitempty"`
-}
-
 func WithProfiles(profiles ...Profile) ConfigOption {
 	return func(c *config) {
 		for _, profile := range profiles {
