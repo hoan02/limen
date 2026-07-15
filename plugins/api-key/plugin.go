@@ -67,8 +67,6 @@ func (p *apiKeyPlugin) RegisterRoutes(httpCore *limen.LimenHTTPCore, routeBuilde
 	routeBuilder.ProtectedPATCH("/:id", "api-key-update", handlers.Update)
 	routeBuilder.ProtectedDELETE("/:id", "api-key-revoke", handlers.Revoke)
 	routeBuilder.ProtectedPOST("/:id/rotate", "api-key-rotate", handlers.Rotate)
-
-	routeBuilder.POST("/verify", "api-key-verify", handlers.Verify)
 }
 
 func (p *apiKeyPlugin) Initialize(core *limen.LimenCore) error {

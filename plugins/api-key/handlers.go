@@ -144,28 +144,3 @@ func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 
 	h.responder.JSON(w, r, http.StatusOK, result)
 }
-
-func (h *apiKeyHandlers) Verify(w http.ResponseWriter, r *http.Request) {
-	opts := limen.BindAndValidate[VerifyOptions](w, r, h.responder, func(v *limen.Validator) {
-		v.Field("permissions").Optional().Object()
-		v.Field("profile").Optional().String().In(h.plugin.ProfileIDs())
-	})
-
-	if opts == nil {
-		return
-	}
-
-	key := r.Header.Get("X-API-Key")
-	if key == "" {
-		h.responder.Error(w, r, ErrInvalidAPIKey)
-		return
-	}
-
-	apiKey, err := h.plugin.Verify(r.Context(), key, opts)
-	if err != nil {
-		h.responder.Error(w, r, err)
-		return
-	}
-
-	h.responder.JSON(w, r, http.StatusOK, apiKey)
-}
