@@ -160,7 +160,7 @@ func (f *FieldValidator) str() (string, bool) {
 func (f *FieldValidator) size() (int, bool) {
 	switch v := f.value.(type) {
 	case string:
-		return len(v), true
+		return len(strings.TrimSpace(v)), true
 	case []any:
 		return len(v), true
 	case map[string]any:
@@ -382,15 +382,20 @@ func (f *FieldValidator) Nullable() *FieldValidator {
 	})
 }
 
-// ValidateJSON validates the parsed JSON body from request context.
+func getPayload(r *http.Request) map[string]any {
+	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
+		if body := GetJSONBody(r); body != nil {
+			return body
+		}
+		return make(map[string]any)
+	}
+	return queryToMap(r)
+}
+
+// ValidateJSON validates the parsed JSON body (for POST, PUT, PATCH) or query params (for GET, DELETE) from request context.
 // On validation failure, it writes an error response and returns nil.
 func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) map[string]any {
-	body := GetJSONBody(r)
-
-	if len(body) == 0 || body == nil {
-		responder.Error(w, r, NewLimenError("empty JSON body", http.StatusBadRequest, nil))
-		return nil
-	}
+	body := getPayload(r)
 
 	v := NewValidator()
 	v.data = body
@@ -404,7 +409,8 @@ func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, 
 	return body
 }
 
-// BindAndValidate validates the JSON body and, on success, marshals it into a new *T.
+// BindAndValidate validates the payload body and, on success, marshals it into a new *T.
+// The payload body is either the JSON body (for POST, PUT, PATCH) or query params (for GET, DELETE).
 func BindAndValidate[T any](w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) *T {
 	body := ValidateJSON(w, r, responder, validateFunc)
 	if body == nil {

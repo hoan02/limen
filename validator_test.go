@@ -453,19 +453,6 @@ func TestValidateJSON(t *testing.T) {
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 	})
 
-	t.Run("invalid JSON", func(t *testing.T) {
-		t.Parallel()
-
-		req := newValidatorTestRequest(t, `{"email":"test@example.com"`)
-		w := httptest.NewRecorder()
-		responder := newResponder(nil, nil, false)
-
-		data := ValidateJSON(w, req, responder, func(v *Validator) {})
-
-		assert.Nil(t, data)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
 	t.Run("missing required field", func(t *testing.T) {
 		t.Parallel()
 

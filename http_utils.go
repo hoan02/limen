@@ -35,6 +35,19 @@ func GetJSONBody(req *http.Request) map[string]any {
 	return nil
 }
 
+func queryToMap(r *http.Request) map[string]any {
+	q := r.URL.Query()
+	out := make(map[string]any, len(q))
+	for key, values := range q {
+		if len(values) == 1 {
+			out[key] = values[0]
+		} else {
+			out[key] = values
+		}
+	}
+	return out
+}
+
 // shouldParseBody checks if the request body should be parsed as JSON
 func shouldParseBody(req *http.Request) bool {
 	if req.Method != "POST" && req.Method != "PUT" && req.Method != "PATCH" {
