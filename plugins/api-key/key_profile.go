@@ -8,18 +8,20 @@ type Profile struct {
 	ID                 string
 	PrincipalType      PrincipalType
 	Prefix             string
-	DefaultPermissions map[string][]string
+	DefaultPermissions Permissions
 	RateLimitMax       int32
 	RateLimitWindow    *time.Duration
 	KeyGenerator       func(profile *Profile) string
 	KeyVerifier        func(key string) bool
+	KeyLength          int
 }
 
 func defaultProfile() Profile {
 	return Profile{
 		ID:            "default",
 		PrincipalType: PrincipalTypeUser,
-		Prefix:        "sk_",
+		Prefix:        "api_",
+		KeyLength:     64,
 	}
 }
 

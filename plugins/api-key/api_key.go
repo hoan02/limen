@@ -63,7 +63,7 @@ func (p *apiKeyPlugin) generateAPIKey(profile *Profile) string {
 		return profile.KeyGenerator(profile)
 	}
 
-	key := limen.GenerateRandomString(p.config.keyLength, limen.CharSetAlphabetic)
+	key := limen.GenerateRandomString(profile.KeyLength, limen.CharSetAlphabetic)
 	return profile.Prefix + key
 }
 

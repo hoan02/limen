@@ -7,12 +7,6 @@ import (
 )
 
 type Permissions = access.Permissions
-type config struct {
-	profiles  map[string]Profile
-	keyLength int
-}
-
-type ConfigOption func(*config)
 
 type ApiKeyCreateRequest struct {
 	ProfileID   string      `json:"profile"`
@@ -46,6 +40,12 @@ type ApiKeyListFilter struct {
 	Status ApiKeyStatus `json:"status,omitempty"`
 }
 
+type config struct {
+	profiles map[string]Profile
+}
+
+type ConfigOption func(*config)
+
 func WithProfiles(profiles ...Profile) ConfigOption {
 	return func(c *config) {
 		for _, profile := range profiles {
@@ -59,11 +59,5 @@ func WithProfiles(profiles ...Profile) ConfigOption {
 
 			c.profiles[profile.ID] = profile
 		}
-	}
-}
-
-func WithKeyLength(length int) ConfigOption {
-	return func(c *config) {
-		c.keyLength = length
 	}
 }

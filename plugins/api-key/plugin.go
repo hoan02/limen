@@ -24,7 +24,6 @@ func New(opts ...ConfigOption) *apiKeyPlugin {
 		profiles: map[string]Profile{
 			"default": defaultProfile(),
 		},
-		keyLength: 64,
 	}
 
 	for _, opt := range opts {
