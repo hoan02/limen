@@ -1,6 +1,7 @@
 package limen
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -332,6 +333,14 @@ func testValuesEqual(a, b any) bool {
 }
 
 func testCompareValues(a, b any) (int, bool) {
+	if av, ok := testIntegerValue(a); ok {
+		bv, ok := testIntegerValue(b)
+		if !ok {
+			return 0, false
+		}
+		return cmp.Compare(av, bv), true
+	}
+
 	switch av := a.(type) {
 	case time.Time:
 		bv, ok := b.(time.Time)
@@ -339,30 +348,25 @@ func testCompareValues(a, b any) (int, bool) {
 			return 0, false
 		}
 		return av.Compare(bv), true
-	case int64:
-		bv, ok := b.(int64)
-		if !ok {
-			return 0, false
-		}
-		if av < bv {
-			return -1, true
-		}
-		if av > bv {
-			return 1, true
-		}
-		return 0, true
 	case string:
 		bv, ok := b.(string)
 		if !ok {
 			return 0, false
 		}
-		if av < bv {
-			return -1, true
-		}
-		if av > bv {
-			return 1, true
-		}
-		return 0, true
+		return cmp.Compare(av, bv), true
+	default:
+		return 0, false
+	}
+}
+
+func testIntegerValue(value any) (int64, bool) {
+	switch value := value.(type) {
+	case int:
+		return int64(value), true
+	case int32:
+		return int64(value), true
+	case int64:
+		return value, true
 	default:
 		return 0, false
 	}

@@ -4,35 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"slices"
 	"time"
 
 	"github.com/thecodearcher/limen"
+	"github.com/thecodearcher/limen/access"
 )
-
-type ApiKeyCreateRequest struct {
-	ProfileID   string      `json:"profile"`
-	Name        string      `json:"name"`
-	Permissions Permissions `json:"permissions,omitempty"`
-	ExpiresIn   *int64      `json:"expires_in,omitempty"`
-}
-
-type ApiKeyUpdateRequest struct {
-	Name           string      `json:"name"`
-	Permissions    Permissions `json:"permissions,omitempty"`
-	AllPermissions bool        `json:"all_permissions,omitempty"`
-}
-
-type ApiKeyRotateRequest struct {
-	ExpiresIn      *int64      `json:"expires_in,omitempty"`
-	Permissions    Permissions `json:"permissions,omitempty"`
-	AllPermissions bool        `json:"all_permissions,omitempty"`
-}
-
-type ApiKeyCreateResult struct {
-	Key string `json:"key"`
-	*ApiKey
-}
 
 func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKeyCreateRequest) (*ApiKeyCreateResult, error) {
 	profile, err := p.GetProfile(req.ProfileID)
@@ -83,8 +59,8 @@ func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKey
 }
 
 func (p *apiKeyPlugin) generateAPIKey(profile *Profile) string {
-	if p.config.generateKey != nil {
-		return p.config.generateKey(profile)
+	if profile.KeyGenerator != nil {
+		return profile.KeyGenerator(profile)
 	}
 
 	key := limen.GenerateRandomString(p.config.keyLength, limen.CharSetAlphabetic)
@@ -92,32 +68,32 @@ func (p *apiKeyPlugin) generateAPIKey(profile *Profile) string {
 }
 
 func (p *apiKeyPlugin) hashAPIKey(key string) string {
-	if p.config.hashKey != nil {
-		return p.config.hashKey(key)
-	}
-
 	sum := sha256.Sum256([]byte(key))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func (p *apiKeyPlugin) List(ctx context.Context, user *limen.User, profileID string, enabledOnly bool, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error) {
-	var profile *Profile
-
-	if profileID != "" {
-		selectedProfile, err := p.GetProfile(profileID)
-		if err != nil {
-			return nil, err
-		}
-		profile = selectedProfile
+func (p *apiKeyPlugin) List(ctx context.Context, user *limen.User, filter *ApiKeyListFilter, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error) {
+	profile, err := p.GetProfile(filter.ProfileID)
+	if err != nil {
+		return nil, err
 	}
 
-	conditions := []limen.Where{limen.Eq(p.apiKeySchema.GetCreatedByField(), user.ID)}
-	if profile != nil {
-		conditions = append(conditions, limen.Eq(p.apiKeySchema.GetProfileField(), profile.ID))
+	principalID, err := p.resolvePrincipalID(ctx, profile.PrincipalType, user.ID)
+	if err != nil {
+		return nil, err
 	}
 
-	if enabledOnly {
+	conditions := []limen.Where{
+		limen.Eq(p.apiKeySchema.GetPrincipalTypeField(), profile.PrincipalType),
+		limen.Eq(p.apiKeySchema.GetPrincipalIDField(), principalID),
+	}
+
+	if filter.Status == APIKeyStatusEnabled {
 		conditions = append(conditions, limen.Eq(p.apiKeySchema.GetEnabledField(), true))
+	}
+
+	if filter.Status == APIKeyStatusDisabled {
+		conditions = append(conditions, limen.Eq(p.apiKeySchema.GetEnabledField(), false))
 	}
 
 	page, err := p.core.FindWithOptions(ctx, p.apiKeySchema, conditions, opts)
@@ -138,6 +114,9 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
+	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
+		return nil, err
+	}
 
 	profile, err := p.GetProfile(apiKey.Profile)
 	if err != nil {
@@ -174,11 +153,16 @@ func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile,
 	if err != nil {
 		return nil, err
 	}
-	if len(customPermissions) > 0 {
-		return clampPermissions(customPermissions, grantablePermissions), nil
+
+	if len(grantablePermissions) == 0 {
+		return customPermissions, nil
 	}
 
-	return clampPermissions(profile.DefaultPermissions, grantablePermissions), nil
+	if len(customPermissions) > 0 {
+		return access.ClampPermissions(customPermissions, grantablePermissions), nil
+	}
+
+	return access.ClampPermissions(profile.DefaultPermissions, grantablePermissions), nil
 }
 
 func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId any, isTemporary bool) error {
@@ -191,13 +175,8 @@ func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId an
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
-	principalID, err := p.resolvePrincipalID(ctx, apiKey.PrincipalType, user.ID)
-	if err != nil {
+	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
 		return err
-	}
-
-	if principalID != apiKey.PrincipalID {
-		return limen.ErrForbidden
 	}
 
 	if isTemporary {
@@ -220,7 +199,11 @@ func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId an
 	if err != nil {
 		return nil, err
 	}
+
 	apiKey := apiKeyModel.(*ApiKey)
+	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
+		return nil, err
+	}
 
 	profile, err := p.GetProfile(apiKey.Profile)
 	if err != nil {
@@ -258,28 +241,16 @@ func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId an
 	}, nil
 }
 
-func intersectPerms(selected, allowed []string) []string {
-	var out []string
-	for _, perm := range selected {
-		if slices.Contains(allowed, perm) {
-			out = append(out, perm)
-		}
-	}
-	return out
-}
-
-func clampPermissions(selected, grantable Permissions) Permissions {
-	if len(grantable) == 0 {
-		return selected
+func (p *apiKeyPlugin) ensureUserOwnsAPIKey(ctx context.Context, user *limen.User, apiKey *ApiKey) error {
+	principalID, err := p.resolvePrincipalID(ctx, apiKey.PrincipalType, user.ID)
+	if err != nil {
+		return err
 	}
 
-	out := make(Permissions, len(selected))
-	for resource, perms := range selected {
-		if filtered := intersectPerms(perms, grantable[resource]); len(filtered) > 0 {
-			out[resource] = filtered
-		}
+	if principalID != apiKey.PrincipalID {
+		return limen.ErrForbidden
 	}
-	return out
+	return nil
 }
 
 func resolveExpiresAt(expiresIn *int64) *time.Time {

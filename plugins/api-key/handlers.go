@@ -28,7 +28,7 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		profileIDs := h.plugin.ProfileIDs()
 
 		v.Field("profile").Optional(defaultProfile().ID).String().In(profileIDs)
-		v.Field("name").Required().String()
+		v.Field("name").Required().String().MinLength(3).MaxLength(100)
 		v.Field("permissions").Optional().Object()
 		v.Field("expires_in").Optional().Number().Min(5 * 60).Max(MaxExpiresIn)
 	})
@@ -53,13 +53,22 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
+	filter := limen.BindAndValidate[ApiKeyListFilter](w, r, h.responder, func(v *limen.Validator) {
+		v.Field("profile").Optional(defaultProfile().ID).String().In(h.plugin.ProfileIDs())
+		v.Field("status").Optional().String().In([]string{string(APIKeyStatusEnabled), string(APIKeyStatusDisabled)})
+	})
+
+	if filter == nil {
+		return
+	}
+
 	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
 	}
 
-	page, err := h.plugin.List(r.Context(), session.User, r.URL.Query().Get("profile"), r.URL.Query().Get("enabled") == "true", limen.ParsePagination(r))
+	page, err := h.plugin.List(r.Context(), session.User, filter, limen.ParsePagination(r))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -73,7 +82,6 @@ func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		v.Field("name").Optional().String()
 		v.Field("permissions").Optional().Object()
 		v.Field("all_permissions").Optional().Boolean()
-		v.Field("enabled").Optional().Boolean()
 	})
 
 	if body == nil {
@@ -135,4 +143,29 @@ func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.responder.JSON(w, r, http.StatusOK, result)
+}
+
+func (h *apiKeyHandlers) Verify(w http.ResponseWriter, r *http.Request) {
+	opts := limen.BindAndValidate[VerifyOptions](w, r, h.responder, func(v *limen.Validator) {
+		v.Field("permissions").Optional().Object()
+		v.Field("profile").Optional().String().In(h.plugin.ProfileIDs())
+	})
+
+	if opts == nil {
+		return
+	}
+
+	key := r.Header.Get("X-API-Key")
+	if key == "" {
+		h.responder.Error(w, r, ErrInvalidAPIKey)
+		return
+	}
+
+	apiKey, err := h.plugin.Verify(r.Context(), key, opts)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, apiKey)
 }

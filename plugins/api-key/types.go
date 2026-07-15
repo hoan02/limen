@@ -2,18 +2,53 @@ package apikey
 
 import (
 	"log"
+
+	"github.com/thecodearcher/limen/access"
 )
 
-type Permissions map[string][]string
-
+type Permissions = access.Permissions
 type config struct {
-	profiles    map[string]Profile
-	keyLength   int
-	generateKey func(profile *Profile) string
-	hashKey     func(key string) string
+	profiles  map[string]Profile
+	keyLength int
 }
 
 type ConfigOption func(*config)
+
+type ApiKeyCreateRequest struct {
+	ProfileID   string      `json:"profile"`
+	Name        string      `json:"name"`
+	Permissions Permissions `json:"permissions,omitempty"`
+	ExpiresIn   *int64      `json:"expires_in,omitempty"`
+}
+
+type ApiKeyUpdateRequest struct {
+	Name           string      `json:"name"`
+	Permissions    Permissions `json:"permissions,omitempty"`
+	AllPermissions bool        `json:"all_permissions,omitempty"`
+}
+
+type ApiKeyRotateRequest struct {
+	ExpiresIn      *int64      `json:"expires_in,omitempty"`
+	Permissions    Permissions `json:"permissions,omitempty"`
+	AllPermissions bool        `json:"all_permissions,omitempty"`
+}
+
+type ApiKeyCreateResult struct {
+	Key string `json:"key"`
+	*ApiKey
+}
+
+type ApiKeyListFilter struct {
+	// Return only API keys for the given profile.
+	ProfileID string `json:"profile"`
+	// Return only enabled API keys.
+	Status ApiKeyStatus `json:"status,omitempty"`
+}
+
+type VerifyOptions struct {
+	RequiredPermissions access.Permissions `json:"permissions,omitempty"`
+	ProfileID           string             `json:"profile,omitempty"`
+}
 
 func WithProfiles(profiles ...Profile) ConfigOption {
 	return func(c *config) {
@@ -28,5 +63,11 @@ func WithProfiles(profiles ...Profile) ConfigOption {
 
 			c.profiles[profile.ID] = profile
 		}
+	}
+}
+
+func WithKeyLength(length int) ConfigOption {
+	return func(c *config) {
+		c.keyLength = length
 	}
 }

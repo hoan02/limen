@@ -2,6 +2,7 @@ package apikey
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/http"
 	"slices"
@@ -66,6 +67,8 @@ func (p *apiKeyPlugin) RegisterRoutes(httpCore *limen.LimenHTTPCore, routeBuilde
 	routeBuilder.ProtectedPATCH("/:id", "api-key-update", handlers.Update)
 	routeBuilder.ProtectedDELETE("/:id", "api-key-revoke", handlers.Revoke)
 	routeBuilder.ProtectedPOST("/:id/rotate", "api-key-rotate", handlers.Rotate)
+
+	routeBuilder.POST("/verify", "api-key-verify", handlers.Verify)
 }
 
 func (p *apiKeyPlugin) Initialize(core *limen.LimenCore) error {
@@ -86,7 +89,7 @@ func (p *apiKeyPlugin) RegisterPrincipalResolver(principalType PrincipalType, r 
 func (p *apiKeyPlugin) resolvePrincipalID(ctx context.Context, principalType PrincipalType, userID any) (principalID any, err error) {
 	resolver, ok := p.principalResolvers[principalType]
 	if !ok {
-		return nil, limen.NewLimenError("principal resolver not found", http.StatusInternalServerError, nil)
+		return nil, limen.NewLimenError(fmt.Sprintf("principal resolver not found for type %s", principalType), http.StatusInternalServerError, nil)
 	}
 	return resolver.ResolvePrincipalID(ctx, string(principalType), userID)
 }

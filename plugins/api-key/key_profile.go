@@ -9,16 +9,17 @@ type Profile struct {
 	PrincipalType      PrincipalType
 	Prefix             string
 	DefaultPermissions map[string][]string
-	RateLimitMax       int
+	RateLimitMax       int32
 	RateLimitWindow    *time.Duration
+	KeyGenerator       func(profile *Profile) string
+	KeyVerifier        func(key string) bool
 }
 
 func defaultProfile() Profile {
 	return Profile{
-		ID:                 "default",
-		PrincipalType:      PrincipalTypeUser,
-		Prefix:             "sk_",
-		DefaultPermissions: nil,
+		ID:            "default",
+		PrincipalType: PrincipalTypeUser,
+		Prefix:        "sk_",
 	}
 }
 
