@@ -49,6 +49,7 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "no-store")
 	h.responder.JSON(w, r, http.StatusCreated, result)
 }
 
@@ -143,5 +144,6 @@ func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "no-store")
 	h.responder.JSON(w, r, http.StatusOK, result)
 }

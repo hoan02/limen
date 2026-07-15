@@ -84,8 +84,9 @@ func (p *apiKeyPlugin) List(ctx context.Context, user *limen.User, filter *ApiKe
 	}
 
 	conditions := []limen.Where{
-		limen.Eq(p.apiKeySchema.GetPrincipalTypeField(), profile.PrincipalType),
+		limen.Eq(p.apiKeySchema.GetPrincipalTypeField(), string(profile.PrincipalType)),
 		limen.Eq(p.apiKeySchema.GetPrincipalIDField(), principalID),
+		limen.Eq(p.apiKeySchema.GetProfileField(), profile.ID),
 	}
 
 	if filter.Status == APIKeyStatusEnabled {
@@ -158,15 +159,16 @@ func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile,
 		return nil, err
 	}
 
+	permissions := customPermissions
+	if len(permissions) == 0 {
+		permissions = profile.DefaultPermissions
+	}
+
 	if len(grantablePermissions) == 0 {
-		return customPermissions, nil
+		return permissions, nil
 	}
 
-	if len(customPermissions) > 0 {
-		return access.ClampPermissions(customPermissions, grantablePermissions), nil
-	}
-
-	return access.ClampPermissions(profile.DefaultPermissions, grantablePermissions), nil
+	return access.ClampPermissions(permissions, grantablePermissions), nil
 }
 
 func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId any) error {

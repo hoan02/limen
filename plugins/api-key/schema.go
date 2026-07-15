@@ -153,7 +153,7 @@ func (s *apiKeySchema) ToStorage(data limen.Model) map[string]any {
 		s.GetNameField():                  apiKey.Name,
 		s.GetProfileField():               apiKey.Profile,
 		s.GetCreatedByField():             apiKey.CreatedByUserID,
-		s.GetPrincipalTypeField():         apiKey.PrincipalType,
+		s.GetPrincipalTypeField():         string(apiKey.PrincipalType),
 		s.GetPrincipalIDField():           apiKey.PrincipalID,
 		s.GetKeyHashField():               apiKey.KeyHash,
 		s.GetPrefixField():                apiKey.Prefix,
