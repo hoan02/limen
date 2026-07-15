@@ -25,6 +25,7 @@ type ApiKeyUpdateRequest struct {
 	Name           string      `json:"name"`
 	Permissions    Permissions `json:"permissions,omitempty"`
 	AllPermissions bool        `json:"all_permissions,omitempty"`
+	Enabled        *bool       `json:"enabled,omitempty"`
 }
 
 type ApiKeyRotateRequest struct {

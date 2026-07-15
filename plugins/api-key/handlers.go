@@ -82,6 +82,7 @@ func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		v.Field("name").Optional().String()
 		v.Field("permissions").Optional().Object()
 		v.Field("all_permissions").Optional().Boolean()
+		v.Field("enabled").Optional().Boolean()
 	})
 
 	if body == nil {
@@ -110,7 +111,7 @@ func (h *apiKeyHandlers) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.plugin.Revoke(r.Context(), session.User, limen.GetParam(r, "id"), r.URL.Query().Get("is_temporary") == "true")
+	err = h.plugin.Revoke(r.Context(), session.User, limen.GetParam(r, "id"))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return

@@ -129,6 +129,10 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 		payload[APIKeySchemaNameField] = req.Name
 	}
 
+	if req.Enabled != nil && *req.Enabled != apiKey.Enabled {
+		payload[APIKeySchemaEnabledField] = req.Enabled
+	}
+
 	if req.AllPermissions || len(req.Permissions) > 0 {
 		permissions, err := p.resolvePermissions(ctx, profile, user, req.Permissions)
 		if err != nil {
@@ -165,7 +169,7 @@ func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile,
 	return access.ClampPermissions(profile.DefaultPermissions, grantablePermissions), nil
 }
 
-func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId any, isTemporary bool) error {
+func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId any) error {
 	apiKeyModel, err := p.core.FindOne(ctx, p.apiKeySchema, []limen.Where{
 		limen.Eq(p.apiKeySchema.GetIDField(), apiKeyId),
 	}, nil)
@@ -177,14 +181,6 @@ func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId an
 	apiKey := apiKeyModel.(*ApiKey)
 	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
 		return err
-	}
-
-	if isTemporary {
-		return p.core.Update(ctx, p.apiKeySchema, map[limen.SchemaField]any{
-			APIKeySchemaEnabledField: false,
-		}, []limen.Where{
-			limen.Eq(p.apiKeySchema.GetIDField(), apiKeyId),
-		})
 	}
 
 	return p.core.Delete(ctx, p.apiKeySchema, []limen.Where{
@@ -217,7 +213,6 @@ func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId an
 		APIKeySchemaKeyHashField:   newKeyHash,
 		APIKeySchemaExpiresAtField: expiresAt,
 		APIKeySchemaLast4Field:     newKey[len(newKey)-4:],
-		APIKeySchemaEnabledField:   true,
 	}
 
 	if req.AllPermissions || len(req.Permissions) > 0 {
