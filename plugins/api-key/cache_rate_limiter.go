@@ -27,6 +27,7 @@ func (r *cacheRateLimiter) key(id any) string {
 }
 
 func (r *cacheRateLimiter) Enforce(ctx context.Context, apiKey *ApiKey) error {
+	r.touchLastUsedAt(ctx, apiKey)
 	if !apiKey.RateLimitEnabled() {
 		return nil
 	}
@@ -44,10 +45,6 @@ func (r *cacheRateLimiter) Enforce(ctx context.Context, apiKey *ApiKey) error {
 	}
 
 	if err := r.cache.SetExpiry(ctx, key, window); err != nil {
-		return err
-	}
-
-	if err := r.touchLastUsedAt(ctx, apiKey); err != nil {
 		return err
 	}
 

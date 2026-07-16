@@ -30,32 +30,6 @@ func (s *apiKeyStore) storeKey(key string) string {
 	return fmt.Sprintf("%s:api-key:%s", s.prefix, key)
 }
 
-func (s *apiKeyStore) FindOne(ctx context.Context, keyHash string, skipCache bool) (*ApiKey, error) {
-	if !skipCache && s.self.config.cacheEnabled {
-		apiKey, err := s.getFromCache(ctx, keyHash)
-		if err != nil {
-			return nil, err
-		}
-
-		if apiKey != nil {
-			return apiKey, nil
-		}
-	}
-
-	apiKeyModel, err := s.core.FindOne(ctx, s.apiKeySchema, []limen.Where{
-		limen.Eq(s.apiKeySchema.GetKeyHashField(), keyHash),
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.updateCache(ctx, apiKeyModel.(*ApiKey)); err != nil {
-		return nil, err
-	}
-
-	return apiKeyModel.(*ApiKey), nil
-}
-
 func (s *apiKeyStore) getFromCache(ctx context.Context, keyHash string) (*ApiKey, error) {
 	data, err := s.cache.Get(ctx, s.storeKey(keyHash))
 	if err != nil && err != limen.ErrRecordNotFound {
@@ -94,23 +68,42 @@ func (s *apiKeyStore) invalidateCache(ctx context.Context, keyHash string) error
 	return s.cache.Delete(ctx, s.storeKey(keyHash))
 }
 
-func (s *apiKeyStore) Update(ctx context.Context, apiKey *ApiKey, value map[limen.SchemaField]any, conditions []limen.Where) error {
-	err := s.core.Update(ctx, s.apiKeySchema, value, conditions)
-	if err != nil {
-		return err
+func (s *apiKeyStore) FindOne(ctx context.Context, keyHash string, skipCache bool) (*ApiKey, error) {
+	if !skipCache && s.self.config.cacheEnabled {
+		apiKey, err := s.getFromCache(ctx, keyHash)
+		if err != nil {
+			return nil, err
+		}
+
+		if apiKey != nil {
+			return apiKey, nil
+		}
 	}
 
-	return s.invalidateCache(ctx, apiKey.KeyHash)
-}
-
-func (s *apiKeyStore) UpdateAndReturn(ctx context.Context, apiKey *ApiKey, value map[limen.SchemaField]any, conditions []limen.Where) (*ApiKey, error) {
-	originalKeyHash := apiKey.KeyHash
-	apiKeyModel, err := s.core.UpdateAndReturn(ctx, s.apiKeySchema, value, conditions, apiKey.ID)
+	apiKeyModel, err := s.core.FindOne(ctx, s.apiKeySchema, []limen.Where{
+		limen.Eq(s.apiKeySchema.GetKeyHashField(), keyHash),
+	}, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.invalidateCache(ctx, originalKeyHash); err != nil {
+	if !skipCache {
+		s.updateCache(ctx, apiKeyModel.(*ApiKey))
+	}
+
+	return apiKeyModel.(*ApiKey), nil
+}
+
+func (s *apiKeyStore) Update(ctx context.Context, apiKey *ApiKey, value map[limen.SchemaField]any, conditions []limen.Where) error {
+	s.invalidateCache(ctx, apiKey.KeyHash)
+	return s.core.Update(ctx, s.apiKeySchema, value, conditions)
+}
+
+func (s *apiKeyStore) UpdateAndReturn(ctx context.Context, apiKey *ApiKey, value map[limen.SchemaField]any, conditions []limen.Where) (*ApiKey, error) {
+	s.invalidateCache(ctx, apiKey.KeyHash)
+
+	apiKeyModel, err := s.core.UpdateAndReturn(ctx, s.apiKeySchema, value, conditions, apiKey.ID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -124,20 +117,14 @@ func (s *apiKeyStore) CreateAndReturn(ctx context.Context, value *ApiKey) (*ApiK
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
-	if err := s.updateCache(ctx, apiKey); err != nil {
-		return nil, err
-	}
+	s.updateCache(ctx, apiKey)
 
 	return apiKey, nil
 }
 
 func (s *apiKeyStore) Delete(ctx context.Context, apiKey *ApiKey) error {
-	err := s.core.Delete(ctx, s.apiKeySchema, []limen.Where{
+	s.invalidateCache(ctx, apiKey.KeyHash)
+	return s.core.Delete(ctx, s.apiKeySchema, []limen.Where{
 		limen.Eq(s.apiKeySchema.GetIDField(), apiKey.ID),
 	})
-	if err != nil {
-		return err
-	}
-
-	return s.invalidateCache(ctx, apiKey.KeyHash)
 }
