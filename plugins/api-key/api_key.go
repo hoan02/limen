@@ -72,6 +72,7 @@ func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKey
 		Last4:           key[len(key)-4:],
 		PrincipalType:   profile.PrincipalType,
 		PrincipalID:     principalID,
+		Metadata:        req.Metadata,
 	}
 
 	if profile.HasRateLimit() {
@@ -174,6 +175,10 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 			return nil, err
 		}
 		payload[APIKeySchemaPermissionsField] = permissions
+	}
+
+	if req.Metadata != nil {
+		payload[APIKeySchemaMetadataField] = req.Metadata
 	}
 
 	updatedApiKey, err := p.store.UpdateAndReturn(ctx, apiKey, payload, []limen.Where{

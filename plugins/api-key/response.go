@@ -29,7 +29,7 @@ type ApiKeyCreateResponse struct {
 	*ApiKeyResponse
 }
 
-func newApiKeyResponse(apiKey *ApiKey) *ApiKeyResponse {
+func newApiKeyResponse(apiKey *ApiKey, cfg *config) *ApiKeyResponse {
 	return &ApiKeyResponse{
 		ID:          apiKey.ID,
 		Name:        apiKey.Name,
@@ -41,23 +41,23 @@ func newApiKeyResponse(apiKey *ApiKey) *ApiKeyResponse {
 		ExpiresAt:   apiKey.ExpiresAt,
 		IsExpired:   apiKey.ExpiresAt != nil && apiKey.ExpiresAt.Before(time.Now()),
 		LastUsedAt:  apiKey.LastUsedAt,
-		Metadata:    apiKey.Metadata,
+		Metadata:    cfg.filterMetadata(apiKey.Metadata),
 		CreatedAt:   apiKey.CreatedAt,
 		UpdatedAt:   apiKey.UpdatedAt,
 	}
 }
 
-func newApiKeyCreateResponse(result *ApiKeyCreateResult) *ApiKeyCreateResponse {
+func newApiKeyCreateResponse(result *ApiKeyCreateResult, cfg *config) *ApiKeyCreateResponse {
 	return &ApiKeyCreateResponse{
 		Key:            result.Key,
-		ApiKeyResponse: newApiKeyResponse(result.ApiKey),
+		ApiKeyResponse: newApiKeyResponse(result.ApiKey, cfg),
 	}
 }
 
-func newApiKeyPageResponse(page *limen.Page[*ApiKey]) *limen.Page[*ApiKeyResponse] {
+func newApiKeyPageResponse(page *limen.Page[*ApiKey], cfg *config) *limen.Page[*ApiKeyResponse] {
 	items := make([]*ApiKeyResponse, 0, len(page.Items))
 	for _, apiKey := range page.Items {
-		items = append(items, newApiKeyResponse(apiKey))
+		items = append(items, newApiKeyResponse(apiKey, cfg))
 	}
 
 	return &limen.Page[*ApiKeyResponse]{

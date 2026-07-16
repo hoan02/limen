@@ -31,6 +31,7 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		v.Field("name").Required().String().MinLength(3).MaxLength(100)
 		v.Field("permissions").Optional().Object()
 		v.Field("expires_in").Optional().Number().Min(5 * 60).Max(MaxExpiresIn)
+		v.Field("metadata").Optional().Object()
 	})
 
 	if body == nil {
@@ -50,7 +51,7 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
-	h.responder.JSON(w, r, http.StatusCreated, newApiKeyCreateResponse(result))
+	h.responder.JSON(w, r, http.StatusCreated, newApiKeyCreateResponse(result, h.plugin.config))
 }
 
 func (h *apiKeyHandlers) Get(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +67,7 @@ func (h *apiKeyHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(apiKey))
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(apiKey, h.plugin.config))
 }
 
 func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +92,7 @@ func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyPageResponse(page))
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyPageResponse(page, h.plugin.config))
 }
 
 func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +101,7 @@ func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		v.Field("permissions").Optional().Object()
 		v.Field("all_permissions").Optional().Boolean()
 		v.Field("enabled").Optional().Boolean()
+		v.Field("metadata").Optional().Object()
 	})
 
 	if body == nil {
@@ -118,7 +120,7 @@ func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(result))
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(result, h.plugin.config))
 }
 
 func (h *apiKeyHandlers) Revoke(w http.ResponseWriter, r *http.Request) {
@@ -161,5 +163,5 @@ func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyCreateResponse(result))
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyCreateResponse(result, h.plugin.config))
 }

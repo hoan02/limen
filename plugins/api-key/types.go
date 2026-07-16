@@ -11,17 +11,19 @@ import (
 type Permissions = access.Permissions
 
 type ApiKeyCreateRequest struct {
-	ProfileID   string      `json:"profile"`
-	Name        string      `json:"name"`
-	Permissions Permissions `json:"permissions,omitempty"`
-	ExpiresIn   *int64      `json:"expires_in,omitempty"`
+	ProfileID   string         `json:"profile"`
+	Name        string         `json:"name"`
+	Permissions Permissions    `json:"permissions,omitempty"`
+	ExpiresIn   *int64         `json:"expires_in,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 type ApiKeyUpdateRequest struct {
-	Name           string      `json:"name"`
-	Permissions    Permissions `json:"permissions,omitempty"`
-	AllPermissions bool        `json:"all_permissions,omitempty"`
-	Enabled        *bool       `json:"enabled,omitempty"`
+	Name           string         `json:"name"`
+	Permissions    Permissions    `json:"permissions,omitempty"`
+	AllPermissions bool           `json:"all_permissions,omitempty"`
+	Enabled        *bool          `json:"enabled,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
 }
 
 type ApiKeyRotateRequest struct {
@@ -48,6 +50,7 @@ type config struct {
 	cacheEnabled       bool
 	cacheTTL           time.Duration
 	lastUsedAtThrottle time.Duration
+	metadataFilter     func(metadata map[string]any) map[string]any
 }
 
 type ConfigOption func(*config)
@@ -102,4 +105,21 @@ func WithLastUsedAtThrottle(throttle time.Duration) ConfigOption {
 	return func(c *config) {
 		c.lastUsedAtThrottle = throttle
 	}
+}
+
+// WithMetadataFilter sets a function that maps an API key's stored metadata to the
+// metadata returned in HTTP responses (e.g. to allowlist or redact keys). Without
+// it, metadata is not returned to clients.
+func WithMetadataFilter(filter func(metadata map[string]any) map[string]any) ConfigOption {
+	return func(c *config) {
+		c.metadataFilter = filter
+	}
+}
+
+// filterMetadata applies the configured metadata filter for HTTP responses.
+func (c *config) filterMetadata(metadata map[string]any) map[string]any {
+	if c.metadataFilter == nil {
+		return nil
+	}
+	return c.metadataFilter(metadata)
 }
