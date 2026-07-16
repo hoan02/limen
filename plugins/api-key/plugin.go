@@ -27,7 +27,7 @@ func New(opts ...ConfigOption) *apiKeyPlugin {
 			"default": defaultProfile(),
 		},
 		cacheEnabled:       true,
-		cacheTTL:           1 * time.Minute,
+		cacheTTL:           5 * time.Minute,
 		rateLimitStoreType: limen.StoreTypeCache,
 		lastUsedAtThrottle: 5 * time.Minute,
 	}
@@ -87,8 +87,8 @@ func (p *apiKeyPlugin) ProfileIDs() []string {
 	return slices.Collect(maps.Keys(p.config.profiles))
 }
 
-func (p *apiKeyPlugin) RegisterPrincipalResolver(principalType PrincipalType, r PrincipalResolver) {
-	p.principalResolvers[principalType] = r
+func (p *apiKeyPlugin) RegisterPrincipalResolver(principalType string, r PrincipalResolver) {
+	p.principalResolvers[PrincipalType(principalType)] = r
 }
 
 func (p *apiKeyPlugin) resolvePrincipalID(ctx context.Context, principalType PrincipalType, userID any) (principalID any, err error) {

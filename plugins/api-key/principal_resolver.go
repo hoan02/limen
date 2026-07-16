@@ -7,6 +7,8 @@ import (
 	"github.com/thecodearcher/limen"
 )
 
+var _ PrincipalResolverRegistry = (*apiKeyPlugin)(nil)
+
 type PrincipalResolver interface {
 	// ResolvePrincipalID resolves the principal ID for the given principal type and user ID
 	ResolvePrincipalID(ctx context.Context, principalType string, userID any) (principalID any, err error)

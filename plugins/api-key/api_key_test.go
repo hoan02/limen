@@ -99,7 +99,7 @@ func TestAPIKeyPlugin_Create_ClampsPermissions(t *testing.T) {
 				Prefix:             "restricted_",
 				DefaultPermissions: tt.defaultPerm,
 			})
-			plugin.RegisterPrincipalResolver(PrincipalTypeUser, &testPrincipalResolver{
+			plugin.RegisterPrincipalResolver(string(PrincipalTypeUser), &testPrincipalResolver{
 				grantable: Permissions{"file": {"read", "write"}},
 			})
 			user := limen.SeedTestUser(t, l, tt.name+"@test.com")
