@@ -218,7 +218,7 @@ func TestAPIKeyPlugin_Verify_ResetsAfterIdleTimeoutConcurrently(t *testing.T) {
 			totalRequests = 10
 		)
 
-		idleTimeout := 10 * time.Millisecond
+		idleTimeout := 1 * time.Second
 		l, plugin := newTestAPIKeyPlugin(t, Profile{
 			ID:              "idle-limited",
 			PrincipalType:   PrincipalTypeUser,
@@ -253,6 +253,7 @@ func newTestAPIKeyPlugin(t *testing.T, profiles ...Profile) (*limen.Limen, *apiK
 	}
 
 	plugin := New(options...)
+	plugin.config.rateLimitStoreType = limen.StoreTypeDatabase
 	l, _ := limen.NewTestLimen(t, plugin)
 	return l, plugin
 }

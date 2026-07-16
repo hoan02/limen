@@ -50,7 +50,23 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
-	h.responder.JSON(w, r, http.StatusCreated, result)
+	h.responder.JSON(w, r, http.StatusCreated, newApiKeyCreateResponse(result))
+}
+
+func (h *apiKeyHandlers) Get(w http.ResponseWriter, r *http.Request) {
+	session, err := limen.GetCurrentSessionFromCtx(r)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	apiKey, err := h.plugin.Get(r.Context(), session.User, limen.GetParam(r, "id"))
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(apiKey))
 }
 
 func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +91,7 @@ func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, page)
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyPageResponse(page))
 }
 
 func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +118,7 @@ func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, result)
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(result))
 }
 
 func (h *apiKeyHandlers) Revoke(w http.ResponseWriter, r *http.Request) {
@@ -145,5 +161,5 @@ func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
-	h.responder.JSON(w, r, http.StatusOK, result)
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyCreateResponse(result))
 }

@@ -58,6 +58,12 @@ func (c *LimenCore) CacheStore() CacheAdapter {
 	return c.cacheStore
 }
 
+// AtomicCacheStore returns the global AtomicCacheAdapter instance.
+// Plugins should use this when they need atomic operations on the cache (e.g. increment/decrement).
+func (c *LimenCore) AtomicCacheStore() AtomicCacheAdapter {
+	return c.cacheStore.(AtomicCacheAdapter)
+}
+
 // CacheKeyPrefix returns the prefix used for all cache keys (sessions, rate limits).
 func (c *LimenCore) CacheKeyPrefix() string {
 	return c.config.CacheKeyPrefix

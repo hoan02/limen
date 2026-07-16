@@ -3,7 +3,6 @@ package apikey
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/thecodearcher/limen"
@@ -11,19 +10,17 @@ import (
 )
 
 func (p *apiKeyPlugin) Verify(ctx context.Context, key string, requiredPermissions access.Permissions) (*ApiKey, error) {
-	return p.validateApiKey(ctx, key, requiredPermissions, "")
+	return p.ValidateApiKey(ctx, key, requiredPermissions, "", p.config.rateLimitStoreType != limen.StoreTypeCache)
 }
 
 func (p *apiKeyPlugin) VerifyWithProfile(ctx context.Context, key string, requiredPermissions access.Permissions, profileID string) (*ApiKey, error) {
-	return p.validateApiKey(ctx, key, requiredPermissions, profileID)
+	return p.ValidateApiKey(ctx, key, requiredPermissions, profileID, p.config.rateLimitStoreType != limen.StoreTypeCache)
 }
 
-func (p *apiKeyPlugin) validateApiKey(ctx context.Context, key string, requiredPermissions access.Permissions, profileID string) (*ApiKey, error) {
+func (p *apiKeyPlugin) ValidateApiKey(ctx context.Context, key string, requiredPermissions access.Permissions, profileID string, skipCache bool) (*ApiKey, error) {
 	keyHash := p.hashAPIKey(key)
 
-	apiKeyModel, err := p.core.FindOne(ctx, p.apiKeySchema, []limen.Where{
-		limen.Eq(p.apiKeySchema.GetKeyHashField(), keyHash),
-	}, nil)
+	apiKey, err := p.store.FindOne(ctx, keyHash, skipCache)
 
 	if err != nil {
 		if errors.Is(err, limen.ErrRecordNotFound) {
@@ -32,7 +29,6 @@ func (p *apiKeyPlugin) validateApiKey(ctx context.Context, key string, requiredP
 		return nil, err
 	}
 
-	apiKey := apiKeyModel.(*ApiKey)
 	profile, err := p.resolveVerificationProfile(apiKey, profileID)
 	if err != nil {
 		return nil, err
@@ -50,7 +46,7 @@ func (p *apiKeyPlugin) validateApiKey(ctx context.Context, key string, requiredP
 		return nil, ErrInvalidAPIKey
 	}
 
-	if err := p.applyRateLimit(ctx, apiKey); err != nil {
+	if err := p.rateLimiter.Enforce(ctx, apiKey); err != nil {
 		return nil, err
 	}
 
@@ -68,97 +64,4 @@ func (p *apiKeyPlugin) resolveVerificationProfile(apiKey *ApiKey, specifiedProfi
 		return nil, ErrInvalidAPIKey
 	}
 	return p.GetProfile(apiKey.Profile)
-}
-
-func (p *apiKeyPlugin) checkRateLimit(apiKey *ApiKey) rateLimitAction {
-	if !apiKey.RateLimitEnabled() {
-		return rateLimitTouch
-	}
-
-	if apiKey.LastUsedAt == nil || apiKey.RateLimitRequestCount == nil {
-		return rateLimitReset
-	}
-
-	idleTimeout := time.Duration(*apiKey.RateLimitWindowMS) * time.Millisecond
-	if time.Since(*apiKey.LastUsedAt) >= idleTimeout {
-		return rateLimitReset
-	}
-
-	if *apiKey.RateLimitRequestCount >= *apiKey.RateLimitMax {
-		return rateLimitReject
-	}
-
-	return rateLimitIncrement
-}
-
-func (p *apiKeyPlugin) applyRateLimit(ctx context.Context, apiKey *ApiKey) error {
-	action := p.checkRateLimit(apiKey)
-	switch action {
-	case rateLimitReject:
-		return ErrRateLimitExceeded
-	case rateLimitTouch:
-		return p.touchLastUsedAt(ctx, apiKey.ID)
-	case rateLimitReset:
-		won, err := p.resetCounterIfUnchanged(ctx, apiKey)
-		if err != nil {
-			return err
-		}
-		if won {
-			return nil
-		}
-		return p.incrementUnderLimit(ctx, apiKey)
-	case rateLimitIncrement:
-		return p.incrementUnderLimit(ctx, apiKey)
-	default:
-		return fmt.Errorf("unknown rate-limit action: %d", action)
-	}
-}
-
-func (p *apiKeyPlugin) touchLastUsedAt(ctx context.Context, apiKeyID any) error {
-	return p.core.Update(ctx, p.apiKeySchema, map[limen.SchemaField]any{
-		APIKeySchemaLastUsedAtField: time.Now(),
-	}, []limen.Where{
-		limen.Eq(p.apiKeySchema.GetIDField(), apiKeyID),
-	})
-}
-
-// resetCounterIfUnchanged starts a new activity period only if the last-used
-// value has not changed since it was read.
-func (p *apiKeyPlugin) resetCounterIfUnchanged(ctx context.Context, apiKey *ApiKey) (bool, error) {
-	var anchorGuard limen.Where
-	if apiKey.LastUsedAt == nil {
-		anchorGuard = limen.IsNull(p.apiKeySchema.GetLastUsedAtField())
-	} else {
-		anchorGuard = limen.Eq(p.apiKeySchema.GetLastUsedAtField(), *apiKey.LastUsedAt)
-	}
-
-	res, err := p.core.UpdateWithResult(ctx, p.apiKeySchema, map[limen.SchemaField]any{
-		APIKeySchemaRateLimitRequestCountField: int32(1),
-		APIKeySchemaLastUsedAtField:            time.Now(),
-	}, []limen.Where{
-		limen.Eq(p.apiKeySchema.GetIDField(), apiKey.ID),
-		anchorGuard,
-	})
-	if err != nil {
-		return false, err
-	}
-	return res.RowsAffected == 1, nil
-}
-
-// incrementUnderLimit atomically increments the counter while capacity remains.
-func (p *apiKeyPlugin) incrementUnderLimit(ctx context.Context, apiKey *ApiKey) error {
-	res, err := p.core.UpdateWithResult(ctx, p.apiKeySchema, map[limen.SchemaField]any{
-		APIKeySchemaRateLimitRequestCountField: limen.IncrementBy(1),
-		APIKeySchemaLastUsedAtField:            time.Now(),
-	}, []limen.Where{
-		limen.Eq(p.apiKeySchema.GetIDField(), apiKey.ID),
-		limen.Lt(p.apiKeySchema.GetRateLimitRequestCountField(), *apiKey.RateLimitMax),
-	})
-	if err != nil {
-		return err
-	}
-	if res.RowsAffected == 0 {
-		return ErrRateLimitExceeded
-	}
-	return nil
 }

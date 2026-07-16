@@ -13,10 +13,12 @@ import (
 
 type apiKeyPlugin struct {
 	config             *config
+	store              *apiKeyStore
 	db                 *limen.DatabaseActionHelper
 	core               *limen.LimenCore
 	apiKeySchema       *apiKeySchema
 	principalResolvers map[PrincipalType]PrincipalResolver
+	rateLimiter        rateLimiter
 }
 
 func New(opts ...ConfigOption) *apiKeyPlugin {
@@ -24,6 +26,10 @@ func New(opts ...ConfigOption) *apiKeyPlugin {
 		profiles: map[string]Profile{
 			"default": defaultProfile(),
 		},
+		cacheEnabled:       true,
+		cacheTTL:           1 * time.Minute,
+		rateLimitStoreType: limen.StoreTypeCache,
+		lastUsedAtThrottle: 5 * time.Minute,
 	}
 
 	for _, opt := range opts {
@@ -62,6 +68,7 @@ func (p *apiKeyPlugin) PluginHTTPConfig() limen.PluginHTTPConfig {
 func (p *apiKeyPlugin) RegisterRoutes(httpCore *limen.LimenHTTPCore, routeBuilder *limen.RouteBuilder) {
 	handlers := newApiKeyHandlers(p, httpCore)
 	routeBuilder.ProtectedPOST("/", "api-key-create", handlers.Create)
+	routeBuilder.ProtectedGET("/:id", "api-key-get", handlers.Get)
 	routeBuilder.ProtectedGET("/", "api-key-list", handlers.List)
 	routeBuilder.ProtectedPATCH("/:id", "api-key-update", handlers.Update)
 	routeBuilder.ProtectedDELETE("/:id", "api-key-revoke", handlers.Revoke)
@@ -71,7 +78,8 @@ func (p *apiKeyPlugin) RegisterRoutes(httpCore *limen.LimenHTTPCore, routeBuilde
 func (p *apiKeyPlugin) Initialize(core *limen.LimenCore) error {
 	p.db = core.DBAction
 	p.core = core
-
+	p.rateLimiter = resolveRateLimiter(p)
+	p.store = newApiKeyStore(p)
 	return nil
 }
 
@@ -105,4 +113,11 @@ func (p *apiKeyPlugin) GetProfile(id string) (*Profile, error) {
 		return nil, limen.NewLimenError("profile not found", http.StatusNotFound, nil)
 	}
 	return &profile, nil
+}
+
+func resolveRateLimiter(plugin *apiKeyPlugin) rateLimiter {
+	if plugin.config.rateLimitStoreType == limen.StoreTypeCache {
+		return newCacheRateLimiter(plugin)
+	}
+	return newDatabaseRateLimiter(plugin)
 }

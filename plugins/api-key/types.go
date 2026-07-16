@@ -1,8 +1,10 @@
 package apikey
 
 import (
-	"log"
+	"fmt"
+	"time"
 
+	"github.com/thecodearcher/limen"
 	"github.com/thecodearcher/limen/access"
 )
 
@@ -41,23 +43,63 @@ type ApiKeyListFilter struct {
 }
 
 type config struct {
-	profiles map[string]Profile
+	profiles           map[string]Profile
+	rateLimitStoreType limen.StoreType
+	cacheEnabled       bool
+	cacheTTL           time.Duration
+	lastUsedAtThrottle time.Duration
 }
 
 type ConfigOption func(*config)
 
 func WithProfiles(profiles ...Profile) ConfigOption {
 	return func(c *config) {
-		for _, profile := range profiles {
-			if _, ok := c.profiles[profile.ID]; ok {
-				log.Fatalf("profile %s already exists", profile.ID)
+		for index, profile := range profiles {
+			if _, ok := c.profiles[profile.ID]; ok && profile.ID != "default" {
+				panic(fmt.Sprintf("api-key: profile %q already exists", profile.ID))
 			}
 
-			if profile.ID == "" {
-				log.Fatalf("profile ID is required")
+			profile.applyDefaults()
+
+			if err := profile.validate(); err != nil {
+				panic(fmt.Sprintf("api-key: profile at index %d is invalid: %s", index, err))
 			}
 
 			c.profiles[profile.ID] = profile
 		}
+	}
+}
+
+// WithRateLimitStoreType sets the type of rate limit store to use.
+// This allows the rate limiting to be performed against a different store than the one used for persistence.
+// like redis, memory, or primary database.
+func WithRateLimitStoreType(storeType limen.StoreType) ConfigOption {
+	return func(c *config) {
+		c.rateLimitStoreType = storeType
+	}
+}
+
+// WithDisableCache disables caching of API keys.
+// If disabled, the API key will be fetched from the database on every find operation.
+func WithDisableCache() ConfigOption {
+	return func(c *config) {
+		c.cacheEnabled = false
+	}
+}
+
+// WithCacheTTL sets the TTL for the cache store.
+// Default is 5 minutes.
+func WithCacheTTL(ttl time.Duration) ConfigOption {
+	return func(c *config) {
+		c.cacheTTL = ttl
+	}
+}
+
+// WithLastUsedAtThrottle limits how often LastUsedAt is persisted when using
+// cache-backed rate limiting. Database-backed rate limiting updates LastUsedAt
+// as part of its normal rate-limit operations and does not use this setting.
+func WithLastUsedAtThrottle(throttle time.Duration) ConfigOption {
+	return func(c *config) {
+		c.lastUsedAtThrottle = throttle
 	}
 }

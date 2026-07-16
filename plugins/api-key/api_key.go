@@ -4,11 +4,45 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"time"
 
 	"github.com/thecodearcher/limen"
 	"github.com/thecodearcher/limen/access"
 )
+
+func (p *apiKeyPlugin) generateAPIKey(profile *Profile) string {
+	if profile.KeyGenerator != nil {
+		return profile.KeyGenerator(profile)
+	}
+
+	key := limen.GenerateRandomString(profile.KeyLength, limen.CharSetAlphabetic)
+	return profile.Prefix + key
+}
+
+func (p *apiKeyPlugin) hashAPIKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// resolvePermissions returns effective key permissions, limited to what the principal can be granted.
+func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile, user *limen.User, customPermissions Permissions) (Permissions, error) {
+	grantablePermissions, err := p.grantablePrincipalPermissions(ctx, profile.PrincipalType, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	permissions := profile.DefaultPermissions
+	if len(customPermissions) > 0 {
+		permissions = customPermissions
+	}
+
+	if len(grantablePermissions) == 0 {
+		return permissions, nil
+	}
+
+	return access.ClampPermissions(permissions, grantablePermissions), nil
+}
 
 func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKeyCreateRequest) (*ApiKeyCreateResult, error) {
 	profile, err := p.GetProfile(req.ProfileID)
@@ -47,29 +81,30 @@ func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKey
 		payload.RateLimitWindowMS = &rateLimitWindowMS
 	}
 
-	apiKey, err := p.core.CreateAndReturn(ctx, p.apiKeySchema, payload, nil, APIKeySchemaKeyHashField)
+	apiKey, err := p.store.CreateAndReturn(ctx, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ApiKeyCreateResult{
 		Key:    key,
-		ApiKey: apiKey.(*ApiKey),
+		ApiKey: apiKey,
 	}, nil
 }
 
-func (p *apiKeyPlugin) generateAPIKey(profile *Profile) string {
-	if profile.KeyGenerator != nil {
-		return profile.KeyGenerator(profile)
+func (p *apiKeyPlugin) Get(ctx context.Context, user *limen.User, id string) (*ApiKey, error) {
+	apiKeyModel, err := p.core.FindOne(ctx, p.apiKeySchema, []limen.Where{
+		limen.Eq(p.apiKeySchema.GetIDField(), id),
+	}, nil)
+	if err != nil {
+		return nil, err
 	}
 
-	key := limen.GenerateRandomString(profile.KeyLength, limen.CharSetAlphabetic)
-	return profile.Prefix + key
-}
-
-func (p *apiKeyPlugin) hashAPIKey(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
+	apiKey := apiKeyModel.(*ApiKey)
+	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
+		return nil, err
+	}
+	return apiKey, nil
 }
 
 func (p *apiKeyPlugin) List(ctx context.Context, user *limen.User, filter *ApiKeyListFilter, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error) {
@@ -142,33 +177,14 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 		payload[APIKeySchemaPermissionsField] = permissions
 	}
 
-	updatedApiKey, err := p.core.UpdateAndReturn(ctx, p.apiKeySchema, payload, []limen.Where{
+	updatedApiKey, err := p.store.UpdateAndReturn(ctx, apiKey, payload, []limen.Where{
 		limen.Eq(p.apiKeySchema.GetIDField(), apiKeyID),
-	}, apiKeyID)
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return updatedApiKey.(*ApiKey), nil
-}
-
-// resolvePermissions returns effective key permissions, limited to what the principal can be granted.
-func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile, user *limen.User, customPermissions Permissions) (Permissions, error) {
-	grantablePermissions, err := p.grantablePrincipalPermissions(ctx, profile.PrincipalType, user.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	permissions := customPermissions
-	if len(permissions) == 0 {
-		permissions = profile.DefaultPermissions
-	}
-
-	if len(grantablePermissions) == 0 {
-		return permissions, nil
-	}
-
-	return access.ClampPermissions(permissions, grantablePermissions), nil
+	return updatedApiKey, nil
 }
 
 func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId any) error {
@@ -185,9 +201,7 @@ func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId an
 		return err
 	}
 
-	return p.core.Delete(ctx, p.apiKeySchema, []limen.Where{
-		limen.Eq(p.apiKeySchema.GetIDField(), apiKeyId),
-	})
+	return p.store.Delete(ctx, apiKey)
 }
 
 func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId any, req *ApiKeyRotateRequest) (*ApiKeyCreateResult, error) {
@@ -225,16 +239,16 @@ func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId an
 		payload[APIKeySchemaPermissionsField] = permissions
 	}
 
-	rotatedApiKey, err := p.core.UpdateAndReturn(ctx, p.apiKeySchema, payload, []limen.Where{
+	rotatedApiKey, err := p.store.UpdateAndReturn(ctx, apiKey, payload, []limen.Where{
 		limen.Eq(p.apiKeySchema.GetIDField(), apiKeyId),
-	}, apiKeyId)
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	return &ApiKeyCreateResult{
 		Key:    newKey,
-		ApiKey: rotatedApiKey.(*ApiKey),
+		ApiKey: rotatedApiKey,
 	}, nil
 }
 
@@ -243,7 +257,8 @@ func (p *apiKeyPlugin) ensureUserOwnsAPIKey(ctx context.Context, user *limen.Use
 	if err != nil {
 		return err
 	}
-
+	fmt.Printf("principalID: %T\n", principalID)
+	fmt.Printf("apiKey.PrincipalID: %T\n", apiKey.PrincipalID)
 	if principalID != apiKey.PrincipalID {
 		return limen.ErrForbidden
 	}

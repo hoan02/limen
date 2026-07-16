@@ -8,32 +8,32 @@ import (
 )
 
 type ApiKey struct {
-	ID      any    `json:"id"`
-	Name    string `json:"name"`
-	Profile string `json:"profile"`
+	ID      any
+	Name    string
+	Profile string
 
 	// Principal — who the key acts as; PrincipalID is resolved via PrincipalType.
-	CreatedByUserID any           `json:"-"`
-	PrincipalType   PrincipalType `json:"-"`
-	PrincipalID     any           `json:"-"`
+	CreatedByUserID any
+	PrincipalType   PrincipalType
+	PrincipalID     any
 
-	KeyHash string  `json:"-"`
-	Prefix  *string `json:"prefix"`
-	Last4   string  `json:"last4"`
+	KeyHash string
+	Prefix  *string
+	Last4   string
 
-	Permissions map[string][]string `json:"permissions"`
+	Permissions map[string][]string
 
-	Enabled   bool       `json:"enabled"`
-	ExpiresAt *time.Time `json:"expires_at"`
+	Enabled   bool
+	ExpiresAt *time.Time
 
-	RateLimitMax          *int32 `json:"-"`
-	RateLimitWindowMS     *int64 `json:"-"`
-	RateLimitRequestCount *int32 `json:"-"`
+	RateLimitMax          *int32
+	RateLimitWindowMS     *int64
+	RateLimitRequestCount *int32
 
-	LastUsedAt *time.Time     `json:"last_used_at"`
-	Metadata   map[string]any `json:"metadata"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
+	LastUsedAt *time.Time
+	Metadata   map[string]any
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 
 	raw map[string]any
 }
@@ -158,7 +158,6 @@ func (s *apiKeySchema) ToStorage(data limen.Model) map[string]any {
 		s.GetKeyHashField():               apiKey.KeyHash,
 		s.GetPrefixField():                apiKey.Prefix,
 		s.GetLast4Field():                 apiKey.Last4,
-		s.GetEnabledField():               apiKey.Enabled,
 		s.GetEnabledField():               apiKey.Enabled,
 		s.GetExpiresAtField():             apiKey.ExpiresAt,
 		s.GetRateLimitMaxField():          apiKey.RateLimitMax,
