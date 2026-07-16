@@ -39,15 +39,12 @@ func (r *cacheRateLimiter) Enforce(ctx context.Context, apiKey *ApiKey) error {
 		return err
 	}
 
-	if newCount == 1 {
-		// Set the expiry time for the key if it is the first time the key is used.
-		if err := r.cache.SetExpiry(ctx, key, window); err != nil {
-			return err
-		}
-	}
-
 	if newCount > int64(*apiKey.RateLimitMax) {
 		return ErrRateLimitExceeded
+	}
+
+	if err := r.cache.SetExpiry(ctx, key, window); err != nil {
+		return err
 	}
 
 	if err := r.touchLastUsedAt(ctx, apiKey); err != nil {

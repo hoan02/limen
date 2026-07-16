@@ -244,7 +244,49 @@ func TestAPIKeyPlugin_Verify_ResetsAfterIdleTimeoutConcurrently(t *testing.T) {
 	})
 }
 
+func TestAPIKeyPlugin_Verify_CacheRateLimiterEnforcesAndResets(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			maxRequests   = 3
+			totalRequests = 10
+		)
+
+		idleTimeout := time.Second
+		l, plugin := newTestAPIKeyPluginWithRateLimitStore(t, limen.StoreTypeCache, Profile{
+			ID:              "cache-limited",
+			PrincipalType:   PrincipalTypeUser,
+			Prefix:          "cache_",
+			RateLimitMax:    maxRequests,
+			RateLimitWindow: &idleTimeout,
+		})
+		user := limen.SeedTestUser(t, l, "cache-limit@test.com")
+		key := createTestAPIKey(t, plugin, user, "cache-limited", nil, nil)
+
+		succeeded, rejected := verifyConcurrently(t, plugin, key, totalRequests)
+		require.Equal(t, maxRequests, succeeded)
+		require.Equal(t, totalRequests-maxRequests, rejected)
+
+		time.Sleep(idleTimeout + time.Nanosecond)
+
+		succeeded, rejected = verifyConcurrently(t, plugin, key, totalRequests)
+		assert.Equal(t, maxRequests, succeeded)
+		assert.Equal(t, totalRequests-maxRequests, rejected)
+	})
+}
+
 func newTestAPIKeyPlugin(t *testing.T, profiles ...Profile) (*limen.Limen, *apiKeyPlugin) {
+	t.Helper()
+
+	return newTestAPIKeyPluginWithRateLimitStore(t, limen.StoreTypeDatabase, profiles...)
+}
+
+func newTestAPIKeyPluginWithRateLimitStore(
+	t *testing.T,
+	storeType limen.StoreType,
+	profiles ...Profile,
+) (*limen.Limen, *apiKeyPlugin) {
 	t.Helper()
 
 	options := []ConfigOption{}
@@ -253,7 +295,7 @@ func newTestAPIKeyPlugin(t *testing.T, profiles ...Profile) (*limen.Limen, *apiK
 	}
 
 	plugin := New(options...)
-	plugin.config.rateLimitStoreType = limen.StoreTypeDatabase
+	plugin.config.rateLimitStoreType = storeType
 	l, _ := limen.NewTestLimen(t, plugin)
 	return l, plugin
 }

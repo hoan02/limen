@@ -14,7 +14,6 @@ type rateLimiter interface {
 
 type databaseRateLimiter struct {
 	self         *apiKeyPlugin
-	apiKey       *ApiKey
 	core         *limen.LimenCore
 	apiKeySchema *apiKeySchema
 }
