@@ -1,3 +1,4 @@
+export * from "./api-key";
 export * from "./bearer";
 export * from "./credential";
 export * from "./magic-link";

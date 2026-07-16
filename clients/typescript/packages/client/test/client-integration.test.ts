@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAuthClient, LimenError } from "../src";
+import { apiKeyPlugin } from "../src/plugins/api-key";
 import { bearerPlugin } from "../src/plugins/bearer";
 import { credentialPasswordPlugin } from "../src/plugins/credential";
 import { magicLinkPlugin } from "../src/plugins/magic-link";
@@ -22,7 +23,7 @@ function mockFetch(reply: (req: Recorded) => MockReply) {
     };
     calls.push(rec);
     const out = reply(rec);
-    const payload = out.body === undefined ? "" : JSON.stringify(out.body);
+    const payload = out.status === 204 ? null : out.body === undefined ? "" : JSON.stringify(out.body);
     const responseInit: ResponseInit = { status: out.status ?? 200 };
     if (out.headers) {
       responseInit.headers = out.headers;
@@ -33,6 +34,21 @@ function mockFetch(reply: (req: Recorded) => MockReply) {
 }
 
 const userBody = { user: { id: "u1", email: "ada@example.com", email_verified_at: null, first_name: "Ada" } };
+const apiKeyBody = {
+  id: "key-1",
+  name: "Deploy key",
+  profile: "default",
+  prefix: "api_",
+  last4: "1234",
+  permissions: { deployments: ["read"] },
+  enabled: true,
+  expires_at: null,
+  is_expired: false,
+  last_used_at: null,
+  metadata: null,
+  created_at: "t0",
+  updated_at: "t1",
+};
 
 function setup(reply: (req: Recorded) => MockReply, redirectFn?: (url: string) => boolean) {
   const { impl, calls } = mockFetch(reply);
@@ -44,6 +60,7 @@ function setup(reply: (req: Recorded) => MockReply, redirectFn?: (url: string) =
       oauthClientPlugin(),
       twoFactorPlugin({ onTwoFactorRedirect: () => {} }),
       bearerPlugin(),
+      apiKeyPlugin(),
     ],
     fetchOptions: { impl },
     crossTabSync: false,
@@ -175,6 +192,76 @@ describe("createAuthClient — two-factor as-pinned routes", () => {
   });
 });
 
+describe("createAuthClient — API key management", () => {
+  it("apiKey.create(): POSTs a snake-cased body and camelizes the returned key", async () => {
+    const { auth, calls } = setup(() => ({ status: 201, body: { key: "api_secret", ...apiKeyBody } }));
+
+    const result = await auth.apiKey.create({
+      name: "Deploy key",
+      permissions: { deployments: ["read"] },
+      expiresIn: 3600,
+      metadata: { environment: "production" },
+    });
+
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.url).toBe("http://localhost:8080/auth/api-keys/");
+    expect(calls[0]?.body).toEqual({
+      name: "Deploy key",
+      permissions: { deployments: ["read"] },
+      expires_in: 3600,
+      metadata: { environment: "production" },
+    });
+    expect(result.key).toBe("api_secret");
+    expect(result).toMatchObject({ expiresAt: null, isExpired: false, createdAt: "t0" });
+  });
+
+  it("apiKey.list(): serializes filters and camelizes the page and its nested items", async () => {
+    const { auth, calls } = setup(() => ({
+      body: { items: [apiKeyBody], total: 1, page: 2, per_page: 10, total_pages: 1 },
+    }));
+
+    const result = await auth.apiKey.list({ profile: "default", status: "enabled", page: 2, perPage: 10 });
+
+    expect(calls[0]?.method).toBe("GET");
+    expect(calls[0]?.url).toBe(
+      "http://localhost:8080/auth/api-keys/?profile=default&status=enabled&page=2&per_page=10",
+    );
+    expect(result).toMatchObject({ total: 1, perPage: 10, totalPages: 1 });
+    expect(result.items[0]).toMatchObject({ id: "key-1", lastUsedAt: null, createdAt: "t0" });
+  });
+
+  it("maps get, update, revoke, and rotate to their id-based routes", async () => {
+    const { auth, calls } = setup((req) =>
+      req.method === "DELETE"
+        ? { status: 204 }
+        : { body: req.url.endsWith("/rotate") ? { key: "api_rotated", ...apiKeyBody } : apiKeyBody },
+    );
+
+    await auth.apiKey.get({ id: "key-1" });
+    const updated = await auth.apiKey.update({
+      id: "key-1",
+      name: "Renamed key",
+      allPermissions: true,
+      enabled: false,
+    });
+    const revoked = await auth.apiKey.revoke({ id: "key-1" });
+    const rotated = await auth.apiKey.rotate({ id: "key-1", expiresIn: null, allPermissions: true });
+
+    expect(calls.map(({ method, url }) => [method, url])).toEqual([
+      ["GET", "http://localhost:8080/auth/api-keys/key-1"],
+      ["PATCH", "http://localhost:8080/auth/api-keys/key-1"],
+      ["DELETE", "http://localhost:8080/auth/api-keys/key-1"],
+      ["POST", "http://localhost:8080/auth/api-keys/key-1/rotate"],
+    ]);
+    expect(calls[1]?.body).toEqual({ name: "Renamed key", all_permissions: true, enabled: false });
+    expect(calls[2]?.body).toEqual({});
+    expect(calls[3]?.body).toEqual({ expires_in: null, all_permissions: true });
+    expect(updated.updatedAt).toBe("t1");
+    expect(revoked).toBeUndefined();
+    expect(rotated).toMatchObject({ key: "api_rotated", isExpired: false });
+  });
+});
+
 describe("createAuthClient — hooks + overrides", () => {
   it("bearer plugin injects the stored access token on later requests", async () => {
     const { auth, calls } = setup(() => ({ body: userBody }));
@@ -228,5 +315,7 @@ describe("createAuthClient — assembly", () => {
     expect(typeof auth.social.unlink).toBe("function");
     expect(typeof auth.twoFactor.sendOTP).toBe("function");
     expect(typeof auth.bearer.getTokens).toBe("function");
+    expect(typeof auth.apiKey.create).toBe("function");
+    expect(typeof auth.apiKey.rotate).toBe("function");
   });
 });
