@@ -13,6 +13,9 @@ type API interface {
 	// Create issues a new API key. The plaintext secret is returned only once.
 	Create(ctx context.Context, user *limen.User, req *ApiKeyCreateRequest) (*ApiKeyCreateResult, error)
 
+	// Get returns an API key by ID.
+	Get(ctx context.Context, user *limen.User, apiKeyID any) (*ApiKey, error)
+
 	// List returns API keys created by the user. If filter is provided, only API keys matching the filter will be returned.
 	List(ctx context.Context, user *limen.User, profileID string, filter *ApiKeyListFilter, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error)
 

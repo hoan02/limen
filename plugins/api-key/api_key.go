@@ -92,7 +92,7 @@ func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKey
 	}, nil
 }
 
-func (p *apiKeyPlugin) Get(ctx context.Context, user *limen.User, id string) (*ApiKey, error) {
+func (p *apiKeyPlugin) Get(ctx context.Context, user *limen.User, id any) (*ApiKey, error) {
 	apiKeyModel, err := p.core.FindOne(ctx, p.apiKeySchema, []limen.Where{
 		limen.Eq(p.apiKeySchema.GetIDField(), id),
 	}, nil)
