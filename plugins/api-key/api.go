@@ -14,7 +14,7 @@ type API interface {
 	Create(ctx context.Context, user *limen.User, req *ApiKeyCreateRequest) (*ApiKeyCreateResult, error)
 
 	// List returns API keys created by the user. If filter is provided, only API keys matching the filter will be returned.
-	List(ctx context.Context, user *limen.User, filter *ApiKeyListFilter, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error)
+	List(ctx context.Context, user *limen.User, profileID string, filter *ApiKeyListFilter, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error)
 
 	// Update changes an existing API key.
 	Update(ctx context.Context, user *limen.User, apiKeyID any, req *ApiKeyUpdateRequest) (*ApiKey, error)

@@ -85,7 +85,7 @@ func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, err := h.plugin.List(r.Context(), session.User, filter, limen.ParsePagination(r))
+	page, err := h.plugin.List(r.Context(), session.User, filter.ProfileID, filter, limen.ParsePagination(r))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return

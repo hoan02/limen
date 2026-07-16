@@ -191,7 +191,7 @@ func TestAPIKeyPlugin_List(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			page, err := plugin.List(t.Context(), user, tt.filter, tt.options)
+			page, err := plugin.List(t.Context(), user, "default", tt.filter, tt.options)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedAll, page.Total)

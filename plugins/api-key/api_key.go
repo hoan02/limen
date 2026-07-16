@@ -106,8 +106,8 @@ func (p *apiKeyPlugin) Get(ctx context.Context, user *limen.User, id string) (*A
 	return apiKey, nil
 }
 
-func (p *apiKeyPlugin) List(ctx context.Context, user *limen.User, filter *ApiKeyListFilter, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error) {
-	profile, err := p.GetProfile(filter.ProfileID)
+func (p *apiKeyPlugin) List(ctx context.Context, user *limen.User, profileId string, filter *ApiKeyListFilter, opts *limen.QueryOptions) (*limen.Page[*ApiKey], error) {
+	profile, err := p.GetProfile(profileId)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 	}
 
 	if req.Enabled != nil && *req.Enabled != apiKey.Enabled {
-		payload[APIKeySchemaEnabledField] = req.Enabled
+		payload[APIKeySchemaEnabledField] = *req.Enabled
 	}
 
 	if req.AllPermissions || len(req.Permissions) > 0 {
