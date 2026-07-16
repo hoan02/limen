@@ -1,3 +1,5 @@
+import type { Page } from "./types";
+
 export function stripTrailingSlash(s: string): string {
   return s.endsWith("/") ? s.slice(0, -1) : s;
 }
@@ -56,6 +58,18 @@ export function camelizeEach<T = Record<string, unknown>>(raw: unknown): T[] {
     return [];
   }
   return raw.map((item) => camelizeKeys<T>(item));
+}
+
+/** Camelize a paginated response and each item it contains. */
+export function camelizePage<T>(
+  raw: unknown,
+  parseItem: (item: unknown) => T = (item) => camelizeKeys<T>(item),
+): Page<T> {
+  const page = camelizeKeys<Omit<Page<T>, "items"> & { items: unknown }>(raw);
+  return {
+    ...page,
+    items: Array.isArray(page.items) ? page.items.map(parseItem) : [],
+  };
 }
 
 /**

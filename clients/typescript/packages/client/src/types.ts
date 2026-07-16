@@ -96,6 +96,14 @@ export type Session<TFields = unknown> = {
   user: User<TFields>;
 };
 
+export type Page<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+};
+
 export type EnvelopeMode = "off" | "wrap-success" | "always";
 
 export type EnvelopeFields = {

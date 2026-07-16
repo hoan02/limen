@@ -3,7 +3,7 @@ export { createAuthClient } from "./client";
 export { deriveErrorCode, LimenError } from "./errors";
 export type { LimenErrorCode } from "./errors";
 
-export { camelizeEach, camelizeKeys } from "./helpers";
+export { camelizeEach, camelizeKeys, camelizePage } from "./helpers";
 export { defaultSessionParse, normalizeUser } from "./normalize";
 
 export type { SessionState, SessionStore } from "./session-store";
@@ -39,6 +39,7 @@ export type {
   EnvelopeFields,
   EnvelopeMode,
   HTTPMethod,
+  Page,
   ParseSession,
   RedirectFn,
   Session,
