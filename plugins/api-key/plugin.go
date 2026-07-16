@@ -99,12 +99,12 @@ func (p *apiKeyPlugin) resolvePrincipalID(ctx context.Context, principalType Pri
 	return resolver.ResolvePrincipalID(ctx, string(principalType), userID)
 }
 
-func (p *apiKeyPlugin) grantablePrincipalPermissions(ctx context.Context, principalType PrincipalType, userID any) (Permissions, error) {
+func (p *apiKeyPlugin) grantablePrincipalPermissions(ctx context.Context, principalType PrincipalType, principalID any) (Permissions, error) {
 	resolver, ok := p.principalResolvers[principalType]
 	if !ok {
 		return nil, limen.NewLimenError("principal resolver not found", http.StatusInternalServerError, nil)
 	}
-	return resolver.GrantablePermissions(ctx, string(principalType), userID)
+	return resolver.GrantablePermissions(ctx, string(principalType), principalID)
 }
 
 func (p *apiKeyPlugin) GetProfile(id string) (*Profile, error) {

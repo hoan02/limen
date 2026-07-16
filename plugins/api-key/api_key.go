@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"time"
 
 	"github.com/thecodearcher/limen"
@@ -26,8 +25,8 @@ func (p *apiKeyPlugin) hashAPIKey(key string) string {
 }
 
 // resolvePermissions returns effective key permissions, limited to what the principal can be granted.
-func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile, user *limen.User, customPermissions Permissions) (Permissions, error) {
-	grantablePermissions, err := p.grantablePrincipalPermissions(ctx, profile.PrincipalType, user.ID)
+func (p *apiKeyPlugin) resolvePermissions(ctx context.Context, profile *Profile, principalID any, customPermissions Permissions) (Permissions, error) {
+	grantablePermissions, err := p.grantablePrincipalPermissions(ctx, profile.PrincipalType, principalID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +54,7 @@ func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKey
 		return nil, err
 	}
 
-	permissions, err := p.resolvePermissions(ctx, profile, user, req.Permissions)
+	permissions, err := p.resolvePermissions(ctx, profile, principalID, req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +169,7 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 	}
 
 	if req.AllPermissions || len(req.Permissions) > 0 {
-		permissions, err := p.resolvePermissions(ctx, profile, user, req.Permissions)
+		permissions, err := p.resolvePermissions(ctx, profile, apiKey.PrincipalID, req.Permissions)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +231,7 @@ func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId an
 	}
 
 	if req.AllPermissions || len(req.Permissions) > 0 {
-		permissions, err := p.resolvePermissions(ctx, profile, user, req.Permissions)
+		permissions, err := p.resolvePermissions(ctx, profile, apiKey.PrincipalID, req.Permissions)
 		if err != nil {
 			return nil, err
 		}
@@ -257,8 +256,6 @@ func (p *apiKeyPlugin) ensureUserOwnsAPIKey(ctx context.Context, user *limen.Use
 	if err != nil {
 		return err
 	}
-	fmt.Printf("principalID: %T\n", principalID)
-	fmt.Printf("apiKey.PrincipalID: %T\n", apiKey.PrincipalID)
 	if principalID != apiKey.PrincipalID {
 		return limen.ErrForbidden
 	}
