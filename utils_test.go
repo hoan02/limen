@@ -7,6 +7,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNormalizeEmail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		email string
+		want  string
+	}{
+		{name: "already normalized", email: "user@example.com", want: "user@example.com"},
+		{name: "mixed case", email: "User@Example.COM", want: "user@example.com"},
+		{name: "surrounding whitespace", email: " \tUser@Example.COM\n", want: "user@example.com"},
+		{name: "plus address", email: "User.Name+tag@Example.com", want: "user.name+tag@example.com"},
+		{name: "empty", email: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, NormalizeEmail(tt.email))
+		})
+	}
+}
+
 func TestGenerateRandomString_Length(t *testing.T) {
 	t.Parallel()
 

@@ -24,9 +24,10 @@ func TestRequestPasswordReset(t *testing.T) {
 	plugin := newTestLimenWithPlugin(t)
 	seedTestUser(t, plugin, "reset@test.com", "Password1")
 
-	verification, err := plugin.RequestPasswordReset(context.Background(), "reset@test.com")
+	verification, err := plugin.RequestPasswordReset(context.Background(), " RESET@TEST.COM ")
 	require.NoError(t, err)
 	assert.NotEmpty(t, verification.Value, "should return a reset token")
+	assert.Equal(t, "password_reset::reset@test.com", verification.Subject)
 }
 
 func TestRequestPasswordReset_NonExistentEmail(t *testing.T) {

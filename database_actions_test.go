@@ -9,6 +9,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDatabaseActionHelper_NormalizesUserEmail(t *testing.T) {
+	t.Parallel()
+
+	l := newTestLimen(t)
+	ctx := context.Background()
+	input := &User{Email: "  User@Example.COM "}
+
+	err := l.core.DBAction.CreateUser(ctx, input, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "  User@Example.COM ", input.Email, "creating a user should not mutate the caller")
+
+	user, err := l.core.DBAction.FindUserByEmail(ctx, "USER@example.com")
+	require.NoError(t, err)
+	assert.Equal(t, "user@example.com", user.Email)
+}
+
 func TestDatabaseActionHelper_VerificationLifecycle(t *testing.T) {
 	t.Parallel()
 

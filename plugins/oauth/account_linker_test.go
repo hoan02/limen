@@ -24,7 +24,7 @@ func TestCreateOrLinkAccount(t *testing.T) {
 		profile := &limen.OAuthAccountProfile{
 			Provider:             "test",
 			ProviderAccountID:    "prov-123",
-			Email:                "new@example.com",
+			Email:                " New@Example.COM ",
 			EmailVerified:        true,
 			AccessToken:          "at",
 			RefreshToken:         "rt",
@@ -35,6 +35,7 @@ func TestCreateOrLinkAccount(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result.User)
 		assert.Equal(t, "new@example.com", result.User.Email)
+		assert.Equal(t, " New@Example.COM ", profile.Email, "linking should not mutate the provider profile")
 		assert.NotNil(t, result.User.EmailVerifiedAt)
 	})
 
@@ -49,7 +50,7 @@ func TestCreateOrLinkAccount(t *testing.T) {
 		profile := &limen.OAuthAccountProfile{
 			Provider:          "test",
 			ProviderAccountID: "prov-456",
-			Email:             "existing@example.com",
+			Email:             "EXISTING@EXAMPLE.COM",
 			AccessToken:       "at",
 		}
 
@@ -112,7 +113,7 @@ func TestLinkAccountToCurrentUser(t *testing.T) {
 		profile := &limen.OAuthAccountProfile{
 			Provider:          "test",
 			ProviderAccountID: "prov-link",
-			Email:             "link@example.com",
+			Email:             "LINK@EXAMPLE.COM",
 			AccessToken:       "at",
 		}
 

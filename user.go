@@ -71,7 +71,7 @@ func (u *UserSchema) FromStorage(data map[string]any) Model {
 func (u *UserSchema) ToStorage(data Model) map[string]any {
 	user := data.(*User)
 	return map[string]any{
-		u.GetEmailField():           user.Email,
+		u.GetEmailField():           NormalizeEmail(user.Email),
 		u.GetPasswordField():        user.Password,
 		u.GetEmailVerifiedAtField(): user.EmailVerifiedAt,
 	}

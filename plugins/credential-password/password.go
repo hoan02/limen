@@ -47,13 +47,13 @@ func (p *credentialPasswordPlugin) RequestPasswordReset(ctx context.Context, ema
 		return nil, err
 	}
 
-	verification, err := p.dbAction.CreateVerification(ctx, PasswordResetAction, email, token, p.config.resetTokenExpiration)
+	verification, err := p.dbAction.CreateVerification(ctx, PasswordResetAction, user.Email, token, p.config.resetTokenExpiration)
 	if err != nil {
 		return nil, err
 	}
 
 	if p.config.sendPasswordResetEmail != nil {
-		p.config.sendPasswordResetEmail(email, verification.Value)
+		p.config.sendPasswordResetEmail(user.Email, verification.Value)
 	}
 
 	return verification, nil
@@ -70,6 +70,7 @@ func (p *credentialPasswordPlugin) ResetPassword(ctx context.Context, token stri
 	if action != PasswordResetAction {
 		return ErrResetTokenInvalid
 	}
+	identifier = limen.NormalizeEmail(identifier)
 
 	if err := p.validatePassword(newPassword); err != nil {
 		return err

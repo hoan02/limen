@@ -34,6 +34,11 @@ var (
 	alphabeticChars   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
 
+// NormalizeEmail returns the canonical representation used to store and compare email addresses.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 // generateCryptoSecureRandomString generates a cryptographically secure random string
 func generateCryptoSecureRandomString() string {
 	buf := make([]byte, 32)

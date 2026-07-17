@@ -17,7 +17,7 @@ func newCommonDatabaseActionsHelper(core *LimenCore) *DatabaseActionHelper {
 
 func (h *DatabaseActionHelper) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	user, err := h.core.FindOne(ctx, h.core.Schema.User, []Where{
-		Eq(h.core.Schema.User.GetEmailField(), email),
+		Eq(h.core.Schema.User.GetEmailField(), NormalizeEmail(email)),
 	}, nil)
 	if err != nil {
 		return nil, err
