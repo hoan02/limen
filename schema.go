@@ -13,12 +13,19 @@ type Schema interface {
 	GetIDField() string
 	Initialize(schemaInfo *SchemaInfo) error
 	setAdditionalFields(additionalFields AdditionalFieldsFunc)
+	setModelTransformer(transformer ModelTransformer)
 }
 
 type Model interface {
 	// Raw returns the model raw data as returned from the database
 	Raw() map[string]any
 }
+
+// ModelTransformer transforms a model into its JSON response representation.
+type ModelTransformer func(model Model) map[string]any
+
+// ModelTransformers maps logical schema names to model transformers.
+type ModelTransformers map[SchemaName]ModelTransformer
 
 type BaseSchema struct {
 	// A function to return a map of additional fields to be added to the schema when creating a record. e.g:
@@ -36,7 +43,7 @@ type BaseSchema struct {
 	schemaInfo *SchemaInfo
 
 	// A function to serialize the model to a json object for returning to the client
-	Serializer func(data Model) map[string]any
+	Serializer ModelTransformer
 }
 
 func (b *BaseSchema) GetTableName() SchemaTableName {
@@ -48,6 +55,10 @@ func (b *BaseSchema) GetTableName() SchemaTableName {
 
 func (b *BaseSchema) setAdditionalFields(additionalFields AdditionalFieldsFunc) {
 	b.additionalFields = additionalFields
+}
+
+func (b *BaseSchema) setModelTransformer(transformer ModelTransformer) {
+	b.Serializer = transformer
 }
 
 func (b *BaseSchema) GetAdditionalFields() AdditionalFieldsFunc {

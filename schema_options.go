@@ -2,6 +2,13 @@ package limen
 
 // --- Schema config (top-level) ---
 
+// WithModelTransformers configures model transformers by logical schema name.
+func WithModelTransformers(transformers ModelTransformers) SchemaConfigOption {
+	return func(config *SchemaConfig) {
+		config.modelTransformers = transformers
+	}
+}
+
 // WithSchemaAdditionalFields sets the global additional fields function
 func WithSchemaAdditionalFields(fn AdditionalFieldsFunc) SchemaConfigOption {
 	return func(c *SchemaConfig) {

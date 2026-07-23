@@ -18,6 +18,9 @@ func discoverSchemas(schemaConfig *SchemaConfig, plugins []Plugin) (map[SchemaNa
 	}
 
 	for schemaName, schema := range schemas {
+		if transformer := schemaConfig.modelTransformers[schemaName]; transformer != nil {
+			schema.Schema.setModelTransformer(transformer)
+		}
 		if err := validateSchemaFields(schema, schemaName, schema.PluginName); err != nil {
 			return nil, err
 		}

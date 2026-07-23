@@ -37,6 +37,8 @@ type SchemaConfig struct {
 	coreSchemaCustomizations map[SchemaName]PluginSchemaConfig
 	// Plugin schema customizations: PluginName -> SchemaName -> Config
 	pluginSchemas map[PluginName]map[SchemaName]PluginSchemaConfig
+	// Model transformers by logical schema name
+	modelTransformers ModelTransformers
 }
 
 type SchemaConfigOption func(*SchemaConfig)
