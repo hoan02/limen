@@ -12,6 +12,7 @@ type Schema interface {
 	GetAdditionalFields() AdditionalFieldsFunc
 	GetIDField() string
 	Initialize(schemaInfo *SchemaInfo) error
+	setAdditionalFields(additionalFields AdditionalFieldsFunc)
 }
 
 type Model interface {
@@ -43,6 +44,10 @@ func (b *BaseSchema) GetTableName() SchemaTableName {
 		return ""
 	}
 	return b.schemaInfo.tableName
+}
+
+func (b *BaseSchema) setAdditionalFields(additionalFields AdditionalFieldsFunc) {
+	b.additionalFields = additionalFields
 }
 
 func (b *BaseSchema) GetAdditionalFields() AdditionalFieldsFunc {

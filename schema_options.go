@@ -84,6 +84,13 @@ func WithPluginSchema(pluginName PluginName, schemaName SchemaName, opts ...Plug
 	}
 }
 
+// WithPluginAdditionalFields sets the additional fields for a plugin schema
+func WithPluginAdditionalFields(fn AdditionalFieldsFunc) PluginSchemaConfigOption {
+	return func(c *PluginSchemaConfig) {
+		c.AdditionalFields = fn
+	}
+}
+
 // --- User schema options ---
 
 func WithUserTableName(tableName SchemaTableName) SchemaConfigUserOption {

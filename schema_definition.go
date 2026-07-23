@@ -189,7 +189,7 @@ func WithSchemaIndex(name string, columns []SchemaField) SchemaDefinitionOption 
 	}
 }
 
-// WithSchemaIndex adds an index to the schema
+// WithSchemaUniqueIndex adds a unique index to the schema
 func WithSchemaUniqueIndex(name string, columns []SchemaField) SchemaDefinitionOption {
 	return func(d *SchemaDefinition) {
 		d.Indexes = append(d.Indexes, IndexDefinition{

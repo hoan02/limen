@@ -61,6 +61,10 @@ func applySchemaCustomizations(schema *SchemaDefinition, config *PluginSchemaCon
 			schema.Columns[i] = col
 		}
 	}
+
+	if schema.Extends == "" && config.AdditionalFields != nil {
+		schema.Schema.setAdditionalFields(config.AdditionalFields)
+	}
 }
 
 func applyCoreSchemaCustomizations(schemas map[SchemaName]SchemaDefinition, config *SchemaConfig) {
@@ -80,7 +84,7 @@ func applyPluginCustomizations(def *SchemaDefinition, pluginName PluginName, sch
 		return
 	}
 	schemaConfig, exists := schemaConfigs[schemaName]
-	if !exists || (schemaConfig.TableName == "" && len(schemaConfig.Fields) == 0) {
+	if !exists || (schemaConfig.TableName == "" && len(schemaConfig.Fields) == 0 && schemaConfig.AdditionalFields == nil) {
 		return
 	}
 

@@ -2,8 +2,9 @@ package limen
 
 // PluginSchemaConfig represents customization for a plugin schema
 type PluginSchemaConfig struct {
-	TableName SchemaTableName        //  override table name
-	Fields    map[SchemaField]string // Map of logical field name -> actual column name
+	TableName        SchemaTableName        //  override table name
+	Fields           map[SchemaField]string // Map of logical field name -> actual column name
+	AdditionalFields AdditionalFieldsFunc
 }
 
 type PluginSchemaConfigOption func(*PluginSchemaConfig)
