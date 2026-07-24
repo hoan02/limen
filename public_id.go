@@ -32,12 +32,16 @@ func (core *LimenCore) assignPublicID(ctx context.Context, schema Schema, payloa
 		return nil
 	}
 
-	field := schema.GetField(config.Field)
+	field := schema.GetField(config.field)
 	if field == "" {
 		return fmt.Errorf("failed to resolve public-ID field for schema %q", schema.GetTableName())
 	}
 
 	if _, exists := payload[field]; exists {
+		return nil
+	}
+
+	if config.Generator == nil {
 		return nil
 	}
 
@@ -57,7 +61,7 @@ func (core *LimenCore) rewritePublicIDConditions(schema Schema, conditions []Whe
 	}
 
 	idColumn := schema.GetIDField()
-	publicIDColumn := schema.GetField(config.Field)
+	publicIDColumn := schema.GetField(config.field)
 
 	var err error
 	for i, condition := range conditions {

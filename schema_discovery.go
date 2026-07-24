@@ -65,7 +65,7 @@ func applyPublicIDConfigs(config *SchemaConfig, schemas map[SchemaName]SchemaDef
 }
 
 func applyPublicIDConfig(schemaName SchemaName, definition *SchemaDefinition, config PublicIDConfig) error {
-	column := findColumnByLogicalField(definition.Columns, config.Field)
+	column := findColumnByLogicalField(definition.Columns, config.field)
 	if column != nil {
 		config.ColumnName = column.Name
 		config.ColumnType = column.Type
@@ -78,7 +78,7 @@ func applyPublicIDConfig(schemaName SchemaName, definition *SchemaDefinition, co
 	if column == nil {
 		publicIDColumn := ColumnDefinition{
 			Name:         config.ColumnName,
-			LogicalField: config.Field,
+			LogicalField: config.field,
 			Type:         config.ColumnType,
 			IsNullable:   false,
 			IsPrimaryKey: false,
@@ -87,10 +87,10 @@ func applyPublicIDConfig(schemaName SchemaName, definition *SchemaDefinition, co
 		definition.Columns = insertColumnAfterLogicalField(definition.Columns, SchemaIDField, publicIDColumn)
 	}
 
-	if !hasPublicIDUniqueIndex(definition.Indexes, config.Field) {
+	if !hasPublicIDUniqueIndex(definition.Indexes, config.field) {
 		definition.Indexes = append(definition.Indexes, IndexDefinition{
 			Name:    fmt.Sprintf("idx_%s_%s_unique", schemaName, config.ColumnName),
-			Columns: []SchemaField{config.Field},
+			Columns: []SchemaField{config.field},
 			Unique:  true,
 		})
 	}
@@ -99,7 +99,7 @@ func applyPublicIDConfig(schemaName SchemaName, definition *SchemaDefinition, co
 }
 
 func validatePublicIDConfig(schemaName SchemaName, config PublicIDConfig) error {
-	if config.Field == "" || config.ColumnName == "" || config.ResponseField == "" {
+	if config.field == "" || config.ColumnName == "" || config.ResponseField == "" {
 		return fmt.Errorf("%w: public-ID fields for schema %q cannot be empty", ErrInvalidConfiguration, schemaName)
 	}
 	if !isPublicIDColumnType(config.ColumnType) {
@@ -111,24 +111,12 @@ func validatePublicIDConfig(schemaName SchemaName, config PublicIDConfig) error 
 		)
 	}
 
-	required := []struct {
-		name    string
-		present bool
-	}{
-		{name: "Generator", present: config.Generator != nil},
-		{name: "Matcher", present: config.Matcher != nil},
-		{name: "Encoder", present: config.Encoder != nil},
-		{name: "Decoder", present: config.Decoder != nil},
-	}
-	for _, callback := range required {
-		if !callback.present {
-			return fmt.Errorf(
-				"%w: public-ID %s callback is required for schema %q",
-				ErrInvalidConfiguration,
-				callback.name,
-				schemaName,
-			)
-		}
+	if config.Matcher == nil {
+		return fmt.Errorf(
+			"%w: public-ID Matcher callback is required for schema %q",
+			ErrInvalidConfiguration,
+			schemaName,
+		)
 	}
 	return nil
 }

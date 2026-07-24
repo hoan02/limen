@@ -39,16 +39,30 @@ type PublicIDEncoder func(schemaName SchemaName, value string) string
 type PublicIDDecoder func(schemaName SchemaName, publicID string) (string, error)
 
 type PublicIDConfig struct {
-	Disabled                 bool
-	DisabledFor              []SchemaName
-	Field                    SchemaField
-	ColumnName               string
-	ColumnType               ColumnType
-	Generator                PublicIDGenerator
-	Matcher                  PublicIDMatcher
-	Encoder                  PublicIDEncoder
-	Decoder                  PublicIDDecoder
-	ResponseField            string
+	Disabled bool
+	// The schemas that the public-ID is disabled for
+	DisabledFor []SchemaName
+	// The logical field name of the public-ID field
+	field SchemaField
+	// The database column name of the public-ID field
+	ColumnName string
+	// The database column type of the public-ID field
+	ColumnType ColumnType
+	// Generator produces the stored public-ID value on insert. Optional: when nil,
+	// generation is skipped and the value is expected from additionalFields or a
+	// database default.
+	Generator PublicIDGenerator
+	// Matcher decides which values route to the public-ID column. Required.
+	Matcher PublicIDMatcher
+	// Encoder transforms the stored value into the outward-facing ID. Optional:
+	// defaults to identity, so the field is exposed as-is.
+	Encoder PublicIDEncoder
+	// Decoder transforms an incoming ID back into the stored value. Optional:
+	// defaults to identity, so the field is queried as-is.
+	Decoder PublicIDDecoder
+	// The field name of the json response that will be returned to the client
+	ResponseField string
+	// If true, the response transform will be disabled
 	DisableResponseTransform bool
 }
 

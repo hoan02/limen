@@ -26,10 +26,16 @@ func WithPublicIDs(global PublicIDConfig) SchemaConfigOption {
 
 func defaultPublicIDConfig(config PublicIDConfig) *PublicIDConfig {
 	resolved := config
-	resolved.Field = cmp.Or(resolved.Field, SchemaPublicIDField)
 	resolved.ColumnName = cmp.Or(resolved.ColumnName, string(SchemaPublicIDField))
+	resolved.field = SchemaPublicIDField
 	resolved.ColumnType = cmp.Or(resolved.ColumnType, ColumnTypeString)
 	resolved.ResponseField = cmp.Or(resolved.ResponseField, string(SchemaIDField))
+	if resolved.Encoder == nil {
+		resolved.Encoder = func(_ SchemaName, value string) string { return value }
+	}
+	if resolved.Decoder == nil {
+		resolved.Decoder = func(_ SchemaName, publicID string) (string, error) { return publicID, nil }
+	}
 	defaultPublicIDDisabledFor := []SchemaName{
 		CoreSchemaAccounts,
 		CoreSchemaSessions,

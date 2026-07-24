@@ -3,6 +3,7 @@ package limen
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 
 	"github.com/thecodearcher/limen/access"
@@ -43,7 +44,7 @@ func (c *LimenCore) EncodePublicID(schema Schema, model Model) (string, bool) {
 		return "", false
 	}
 
-	column := schema.GetField(config.Field)
+	column := schema.GetField(config.field)
 	value, ok := model.Raw()[column].(string)
 	if !ok || value == "" {
 		return "", false
@@ -52,7 +53,7 @@ func (c *LimenCore) EncodePublicID(schema Schema, model Model) (string, bool) {
 }
 
 func (c *LimenCore) SerializeModel(schema Schema, model Model) map[string]any {
-	serialized := schema.Serialize(model)
+	serialized := maps.Clone(schema.Serialize(model))
 	_, config, enabled := c.getPublicIDConfig(schema)
 
 	if _, ok := serialized[schema.GetIDField()].(int64); ok {
@@ -63,8 +64,7 @@ func (c *LimenCore) SerializeModel(schema Schema, model Model) map[string]any {
 		return serialized
 	}
 
-	delete(serialized, schema.GetField(config.Field))
-
+	delete(serialized, schema.GetField(config.field))
 	if encoded, ok := c.EncodePublicID(schema, model); ok {
 		serialized[config.ResponseField] = encoded
 	}
