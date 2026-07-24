@@ -24,6 +24,53 @@ type LimenCore struct {
 	secret         []byte
 }
 
+func (c *LimenCore) getPublicIDConfig(schema Schema) (SchemaName, *PublicIDConfig, bool) {
+	schemaName := schema.GetSchemaName()
+	if schemaName == "" {
+		return "", nil, false
+	}
+
+	config, ok := c.Schema.getPublicIDConfig(schemaName)
+	if !ok {
+		return schemaName, nil, false
+	}
+	return schemaName, config, true
+}
+
+func (c *LimenCore) EncodePublicID(schema Schema, model Model) (string, bool) {
+	schemaName, config, ok := c.getPublicIDConfig(schema)
+	if !ok || model == nil {
+		return "", false
+	}
+
+	column := schema.GetField(config.Field)
+	value, ok := model.Raw()[column].(string)
+	if !ok || value == "" {
+		return "", false
+	}
+	return config.Encoder(schemaName, value), true
+}
+
+func (c *LimenCore) SerializeModel(schema Schema, model Model) map[string]any {
+	serialized := schema.Serialize(model)
+	_, config, enabled := c.getPublicIDConfig(schema)
+
+	if _, ok := serialized[schema.GetIDField()].(int64); ok {
+		delete(serialized, schema.GetIDField())
+	}
+
+	if !enabled || config.DisableResponseTransform {
+		return serialized
+	}
+
+	delete(serialized, schema.GetField(config.Field))
+
+	if encoded, ok := c.EncodePublicID(schema, model); ok {
+		serialized[config.ResponseField] = encoded
+	}
+	return serialized
+}
+
 func (a *LimenCore) initializeSchemas(discoveredSchemas map[SchemaName]SchemaDefinition) error {
 	if a.schemaResolver == nil {
 		return fmt.Errorf("schema resolver must be instantiated before initializing schemas")

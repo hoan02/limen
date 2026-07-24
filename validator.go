@@ -2,6 +2,7 @@ package limen
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -24,7 +25,8 @@ func (e *ValidationError) Error() string {
 }
 
 type Errors struct {
-	errors []*ValidationError
+	errors      []*ValidationError
+	responseErr error
 }
 
 func (e *Errors) Error() string {
@@ -62,6 +64,8 @@ type Validator struct {
 	data   map[string]any // bound request body
 }
 
+const validatorParamsKey = "_params"
+
 func NewValidator() *Validator {
 	return &Validator{
 		errors: &Errors{},
@@ -77,14 +81,40 @@ func (v *Validator) Validate() error {
 
 // Field begins a validation chain for a single body field.
 func (v *Validator) Field(field string) *FieldValidator {
-	return &FieldValidator{v: v, field: field, value: v.data[field]}
+	return &FieldValidator{
+		v:     v,
+		field: field,
+		value: v.data[field],
+		setValue: func(value any) {
+			v.data[field] = value
+		},
+	}
+}
+
+// Param begins a validation chain for a route parameter.
+func (v *Validator) Param(param string) *FieldValidator {
+	params, _ := v.data[validatorParamsKey].(map[string]any)
+	if params == nil {
+		params = make(map[string]any)
+		v.data[validatorParamsKey] = params
+	}
+
+	return &FieldValidator{
+		v:     v,
+		field: param,
+		value: params[param],
+		setValue: func(value any) {
+			params[param] = value
+		},
+	}
 }
 
 type FieldValidator struct {
-	v     *Validator
-	field string
-	value any
-	skip  bool // when true, remaining rules are skipped
+	v        *Validator
+	field    string
+	value    any
+	skip     bool // when true, remaining rules are skipped
+	setValue func(any)
 }
 
 func (f *FieldValidator) Field(field string) *FieldValidator {
@@ -153,7 +183,9 @@ func (f *FieldValidator) str() (string, bool) {
 		return "", false
 	}
 	f.value = strings.TrimSpace(s)
-	f.v.data[f.field] = f.value
+	if f.setValue != nil {
+		f.setValue(f.value)
+	}
 	return s, true
 }
 
@@ -319,7 +351,9 @@ func (f *FieldValidator) Number() *FieldValidator {
 			return
 		}
 		f.value = int64(n)
-		f.v.data[f.field] = int64(n)
+		if f.setValue != nil {
+			f.setValue(int64(n))
+		}
 	})
 }
 
@@ -332,7 +366,9 @@ func (f *FieldValidator) Boolean() *FieldValidator {
 			return
 		}
 		f.value = slices.Contains(truthyValues, f.value)
-		f.v.data[f.field] = f.value
+		if f.setValue != nil {
+			f.setValue(f.value)
+		}
 	})
 }
 
@@ -359,6 +395,10 @@ func (f *FieldValidator) Max(max float64) *FieldValidator {
 func (f *FieldValidator) Custom(fn func(value any, data map[string]any) error) *FieldValidator {
 	return f.apply(func() {
 		if err := fn(f.value, f.v.data); err != nil {
+			var limenErr *LimenError
+			if errors.As(err, &limenErr) {
+				f.v.errors.responseErr = err
+			}
 			f.v.errors.Add(f.field, err.Error(), false)
 		}
 	})
@@ -383,18 +423,27 @@ func (f *FieldValidator) Nullable() *FieldValidator {
 }
 
 func getPayload(r *http.Request) map[string]any {
+	paramsData := make(map[string]any, len(GetParams(r)))
+	for key, value := range GetParams(r) {
+		paramsData[key] = value
+	}
+
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
 		if body := GetJSONBody(r); body != nil {
+			body[validatorParamsKey] = paramsData
 			return body
 		}
-		return make(map[string]any)
+		return map[string]any{validatorParamsKey: paramsData}
 	}
-	return queryToMap(r)
+
+	payload := queryToMap(r)
+	payload[validatorParamsKey] = paramsData
+	return payload
 }
 
-// ValidateJSON validates the parsed JSON body (for POST, PUT, PATCH) or query params (for GET, DELETE) from request context.
+// ValidateRequest validates the parsed JSON body (for POST, PUT, PATCH) or query params (for GET, DELETE) from request context.
 // On validation failure, it writes an error response and returns nil.
-func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) map[string]any {
+func ValidateRequest(w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) map[string]any {
 	body := getPayload(r)
 
 	v := NewValidator()
@@ -402,7 +451,11 @@ func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, 
 	validateFunc(v)
 
 	if err := v.Validate(); err != nil {
-		responder.Error(w, r, NewLimenError(err.Error(), http.StatusUnprocessableEntity, nil))
+		if responseErr := v.errors.responseErr; responseErr != nil {
+			responder.Error(w, r, responseErr)
+		} else {
+			responder.Error(w, r, NewLimenError(err.Error(), http.StatusUnprocessableEntity, nil))
+		}
 		return nil
 	}
 
@@ -412,7 +465,7 @@ func ValidateJSON(w http.ResponseWriter, r *http.Request, responder *Responder, 
 // BindAndValidate validates the payload body and, on success, marshals it into a new *T.
 // The payload body is either the JSON body (for POST, PUT, PATCH) or query params (for GET, DELETE).
 func BindAndValidate[T any](w http.ResponseWriter, r *http.Request, responder *Responder, validateFunc func(*Validator)) *T {
-	body := ValidateJSON(w, r, responder, validateFunc)
+	body := ValidateRequest(w, r, responder, validateFunc)
 	if body == nil {
 		return nil
 	}

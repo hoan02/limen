@@ -2,6 +2,7 @@ package limen
 
 import (
 	"fmt"
+	"slices"
 )
 
 // discoverSchemas loads schemas from core configuration and all registered plugins,
@@ -15,6 +16,10 @@ func discoverSchemas(schemaConfig *SchemaConfig, plugins []Plugin) (map[SchemaNa
 		if err := processPluginSchemas(plugin, schemaConfig, schemas); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := applyPublicIDConfigs(schemaConfig, schemas); err != nil {
+		return nil, err
 	}
 
 	for schemaName, schema := range schemas {
@@ -35,6 +40,112 @@ func discoverSchemas(schemaConfig *SchemaConfig, plugins []Plugin) (map[SchemaNa
 	}
 
 	return schemas, nil
+}
+
+func applyPublicIDConfigs(config *SchemaConfig, schemas map[SchemaName]SchemaDefinition) error {
+	for schemaName, definition := range schemas {
+		if definition.Extends == "" && definition.DisablePublicID {
+			if config.publicIDDisabledFor == nil {
+				config.publicIDDisabledFor = make(map[SchemaName]struct{})
+			}
+			config.publicIDDisabledFor[schemaName] = struct{}{}
+			continue
+		}
+
+		resolved, enabled := config.getPublicIDConfig(schemaName)
+		if !enabled {
+			continue
+		}
+		if err := applyPublicIDConfig(schemaName, &definition, *resolved); err != nil {
+			return err
+		}
+		schemas[schemaName] = definition
+	}
+	return nil
+}
+
+func applyPublicIDConfig(schemaName SchemaName, definition *SchemaDefinition, config PublicIDConfig) error {
+	column := findColumnByLogicalField(definition.Columns, config.Field)
+	if column != nil {
+		config.ColumnName = column.Name
+		config.ColumnType = column.Type
+	}
+
+	if err := validatePublicIDConfig(schemaName, config); err != nil {
+		return err
+	}
+
+	if column == nil {
+		publicIDColumn := ColumnDefinition{
+			Name:         config.ColumnName,
+			LogicalField: config.Field,
+			Type:         config.ColumnType,
+			IsNullable:   false,
+			IsPrimaryKey: false,
+			Tags:         make(map[string]string),
+		}
+		definition.Columns = insertColumnAfterLogicalField(definition.Columns, SchemaIDField, publicIDColumn)
+	}
+
+	if !hasPublicIDUniqueIndex(definition.Indexes, config.Field) {
+		definition.Indexes = append(definition.Indexes, IndexDefinition{
+			Name:    fmt.Sprintf("idx_%s_%s_unique", schemaName, config.ColumnName),
+			Columns: []SchemaField{config.Field},
+			Unique:  true,
+		})
+	}
+
+	return nil
+}
+
+func validatePublicIDConfig(schemaName SchemaName, config PublicIDConfig) error {
+	if config.Field == "" || config.ColumnName == "" || config.ResponseField == "" {
+		return fmt.Errorf("%w: public-ID fields for schema %q cannot be empty", ErrInvalidConfiguration, schemaName)
+	}
+	if !isPublicIDColumnType(config.ColumnType) {
+		return fmt.Errorf(
+			"%w: public-ID column type %q for schema %q must accept strings",
+			ErrInvalidConfiguration,
+			config.ColumnType,
+			schemaName,
+		)
+	}
+
+	required := []struct {
+		name    string
+		present bool
+	}{
+		{name: "Generator", present: config.Generator != nil},
+		{name: "Matcher", present: config.Matcher != nil},
+		{name: "Encoder", present: config.Encoder != nil},
+		{name: "Decoder", present: config.Decoder != nil},
+	}
+	for _, callback := range required {
+		if !callback.present {
+			return fmt.Errorf(
+				"%w: public-ID %s callback is required for schema %q",
+				ErrInvalidConfiguration,
+				callback.name,
+				schemaName,
+			)
+		}
+	}
+	return nil
+}
+
+func isPublicIDColumnType(columnType ColumnType) bool {
+	switch columnType {
+	case ColumnTypeString, ColumnTypeText, ColumnTypeUUID:
+		return true
+	default:
+		return false
+	}
+}
+
+func hasPublicIDUniqueIndex(indexes []IndexDefinition, field SchemaField) bool {
+	return slices.ContainsFunc(indexes, func(index IndexDefinition) bool {
+		return index.Unique && len(index.Columns) == 1 && index.Columns[0] == field
+	})
 }
 
 func collectCoreSchemas(schemaConfig *SchemaConfig) map[SchemaName]SchemaDefinition {
@@ -273,4 +384,16 @@ func findColumnByLogicalField(columns []ColumnDefinition, logicalField SchemaFie
 		}
 	}
 	return nil
+}
+
+func insertColumnAfterLogicalField(columns []ColumnDefinition, afterField SchemaField, column ColumnDefinition) []ColumnDefinition {
+	i := slices.IndexFunc(columns, func(existing ColumnDefinition) bool {
+		return existing.LogicalField == afterField
+	})
+
+	if i == -1 {
+		return append(columns, column)
+	}
+
+	return slices.Insert(columns, i+1, column)
 }

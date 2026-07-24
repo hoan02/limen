@@ -1,6 +1,7 @@
 package limen
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -433,7 +434,7 @@ func TestValidateJSON(t *testing.T) {
 		w := httptest.NewRecorder()
 		responder := newResponder(nil, nil, false)
 
-		data := ValidateJSON(w, req, responder, emailPasswordValidator)
+		data := ValidateRequest(w, req, responder, emailPasswordValidator)
 
 		require.NotNil(t, data)
 		assert.Equal(t, "test@example.com", data["email"])
@@ -447,7 +448,7 @@ func TestValidateJSON(t *testing.T) {
 		w := httptest.NewRecorder()
 		responder := newResponder(nil, nil, false)
 
-		data := ValidateJSON(w, req, responder, emailPasswordValidator)
+		data := ValidateRequest(w, req, responder, emailPasswordValidator)
 
 		assert.Nil(t, data)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -460,10 +461,48 @@ func TestValidateJSON(t *testing.T) {
 		w := httptest.NewRecorder()
 		responder := newResponder(nil, nil, false)
 
-		data := ValidateJSON(w, req, responder, emailPasswordValidator)
+		data := ValidateRequest(w, req, responder, emailPasswordValidator)
 
 		assert.Nil(t, data)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("validates route params through Param and isolates under _params", func(t *testing.T) {
+		t.Parallel()
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/users/123?id=body-id", nil)
+		req = req.WithContext(context.WithValue(req.Context(), paramsContextKey{}, map[string]string{"id": "usr_123"}))
+		w := httptest.NewRecorder()
+		responder := newResponder(nil, nil, false)
+
+		data := ValidateRequest(w, req, responder, func(v *Validator) {
+			v.Param("id").Required().String()
+		})
+
+		require.NotNil(t, data)
+		assert.Equal(t, "body-id", data["id"])
+
+		params, ok := data[validatorParamsKey].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "usr_123", params["id"])
+	})
+
+	t.Run("custom hook preserves limen error status", func(t *testing.T) {
+		t.Parallel()
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/users/123", nil)
+		req = req.WithContext(context.WithValue(req.Context(), paramsContextKey{}, map[string]string{"id": "123"}))
+		w := httptest.NewRecorder()
+		responder := newResponder(nil, nil, false)
+
+		data := ValidateRequest(w, req, responder, func(v *Validator) {
+			v.Param("id").Required().Custom(func(_ any, _ map[string]any) error {
+				return NewLimenError("conflict", http.StatusConflict, nil)
+			})
+		})
+
+		assert.Nil(t, data)
+		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 }
 

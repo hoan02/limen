@@ -465,7 +465,7 @@ func joinURL(baseURL string, pathElems ...string) string {
 
 // ToSliceOfType converts a slice of Model to a slice of a specific type.
 // Returns an empty slice if the conversion fails.
-func ModelToSliceOfType[T any](values []Model) []T {
+func MapToSliceOfType[T any](values []Model) []T {
 	out := make([]T, 0, len(values))
 	for _, value := range values {
 		out = append(out, value.(T))
@@ -476,7 +476,7 @@ func ModelToSliceOfType[T any](values []Model) []T {
 // MapPage converts a Page of Model into a Page of a concrete type.
 func MapPage[T any](page *Page[Model]) *Page[T] {
 	return &Page[T]{
-		Items:      ModelToSliceOfType[T](page.Items),
+		Items:      MapToSliceOfType[T](page.Items),
 		Total:      page.Total,
 		Page:       page.Page,
 		PerPage:    page.PerPage,

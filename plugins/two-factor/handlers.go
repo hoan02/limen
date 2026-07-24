@@ -21,7 +21,7 @@ func newTwoFactorHandlers(plugin *twoFactorPlugin, responder *limen.Responder, h
 }
 
 func (a *twoFactorHandlers) InitiateTwoFactorSetup(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
 		v.Field("password").Required()
 	})
 
@@ -46,7 +46,7 @@ func (a *twoFactorHandlers) InitiateTwoFactorSetup(w http.ResponseWriter, r *htt
 }
 
 func (a *twoFactorHandlers) FinalizeTwoFactorSetup(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
 		v.Field("code").Required()
 	})
 
@@ -78,7 +78,7 @@ func (a *twoFactorHandlers) FinalizeTwoFactorSetup(w http.ResponseWriter, r *htt
 
 // Disable disables 2FA for the current user
 func (a *twoFactorHandlers) Disable(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
 		v.Field("password").Required()
 	})
 
@@ -109,7 +109,7 @@ func (a *twoFactorHandlers) Disable(w http.ResponseWriter, r *http.Request) {
 
 // VerifyLoginWithTwoFactor verifies the 2FA code and completes the login process
 func (a *twoFactorHandlers) VerifyLoginWithTwoFactor(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
 		v.Field("code").Required()
 		v.Field("method").
 			Optional(string(TwoFactorMethodTOTP)).

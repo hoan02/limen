@@ -110,7 +110,7 @@ func (h *oauthHandlers) ListAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, limen.SerializeAll(h.plugin.accountSchema, accounts))
+	h.responder.JSON(w, r, http.StatusOK, limen.SerializeModels(h.plugin.core, h.plugin.accountSchema, accounts))
 }
 
 func (h *oauthHandlers) UnlinkAccount(w http.ResponseWriter, r *http.Request) {

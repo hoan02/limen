@@ -58,7 +58,7 @@ func routes(e *credentialPasswordHandlers) {
 // SignInWithCredentialAndPassword handles user sign-in with either email or username (if enabled) and password.
 // The credential can be either an email address or a username.
 func (p *credentialPasswordHandlers) SignInWithCredentialAndPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
 		v.Field("credential").Required()
 		v.Field("password").Required()
 	})
@@ -93,7 +93,7 @@ func (p *credentialPasswordHandlers) isUsernameRequiredOnSignup() bool {
 // SignUpWithCredentialAndPassword handles user registration with email and password.
 // If username support is enabled, a username can be provided in the request body.
 func (p *credentialPasswordHandlers) SignUpWithCredentialAndPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
 		v.Field("email").Required().Email()
 		v.Field("password").Required().String().Custom(func(value any, _ map[string]any) error {
 			password, _ := value.(string)
@@ -142,7 +142,7 @@ func (p *credentialPasswordHandlers) SignUpWithCredentialAndPassword(w http.Resp
 // RequestPasswordReset handles password reset requests.
 // To prevent email enumeration, always returns success regardless of whether the email exists.
 func (p *credentialPasswordHandlers) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
 		v.Field("email").Required().Email()
 	})
 
@@ -168,7 +168,7 @@ func (p *credentialPasswordHandlers) RequestPasswordReset(w http.ResponseWriter,
 
 // ResetPassword handles password reset using a valid reset token.
 func (p *credentialPasswordHandlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
 		v.Field("token").Required()
 		v.Field("new_password").Required().Custom(func(value any, _ map[string]any) error {
 			newPassword, _ := value.(string)
@@ -192,7 +192,7 @@ func (p *credentialPasswordHandlers) ResetPassword(w http.ResponseWriter, r *htt
 // ChangePassword handles password changes for authenticated users.
 // Optionally revokes all other sessions when revoke_other_sessions is true.
 func (p *credentialPasswordHandlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
 		v.Field("current_password").Required()
 		v.Field("new_password").Required().Custom(func(value any, _ map[string]any) error {
 			newPassword, _ := value.(string)
@@ -239,7 +239,7 @@ func (p *credentialPasswordHandlers) ChangePassword(w http.ResponseWriter, r *ht
 }
 
 func (p *credentialPasswordHandlers) SetPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
 		v.Field("new_password").Required().Custom(func(value any, _ map[string]any) error {
 			newPassword, _ := value.(string)
 			return p.plugin.validatePassword(newPassword)
@@ -286,7 +286,7 @@ func (p *credentialPasswordHandlers) SetPassword(w http.ResponseWriter, r *http.
 
 // CheckUsernameAvailability handles username availability checks.
 func (p *credentialPasswordHandlers) CheckUsernameAvailability(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator) {
+	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
 		v.Field("username").Required().Custom(func(value any, _ map[string]any) error {
 			username, _ := value.(string)
 			return p.plugin.validateUsername(username)

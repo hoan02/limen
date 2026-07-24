@@ -49,7 +49,7 @@ func (p *apiKeyPlugin) Name() limen.PluginName {
 }
 
 func (p *apiKeyPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.SchemaIntrospector {
-	p.apiKeySchema = newAPIKeySchema()
+	p.apiKeySchema = newAPIKeySchema(p.config)
 	apiKeyTableDef := buildAPIKeyTableDef(schema, p.apiKeySchema)
 
 	return []limen.SchemaIntrospector{apiKeyTableDef}

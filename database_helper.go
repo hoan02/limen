@@ -21,6 +21,10 @@ func (core *LimenCore) getDB(ctx context.Context) DatabaseAdapter {
 }
 
 func (core *LimenCore) FindOne(ctx context.Context, schema Schema, conditions []Where, orderBy []OrderBy) (Model, error) {
+	conditions, err := core.rewritePublicIDConditions(schema, conditions)
+	if err != nil {
+		return nil, err
+	}
 	conditions = applySoftDeleteFilter(schema, conditions)
 	db := core.getDB(ctx)
 	result, err := db.FindOne(ctx, schema.GetTableName(), conditions, orderBy)
@@ -32,7 +36,7 @@ func (core *LimenCore) FindOne(ctx context.Context, schema Schema, conditions []
 	return model, nil
 }
 
-func (core *LimenCore) buildCreatePayload(ctx context.Context, schema Schema, data Model, additionalFields map[string]any) (map[string]any, error) {
+func (core *LimenCore) buildCreatePayload(ctx context.Context, schema Schema, data any, additionalFields map[string]any) (map[string]any, error) {
 	payload := make(map[string]any)
 
 	additionalFieldsContext := getAdditionalFieldsContext(ctx)
@@ -55,9 +59,17 @@ func (core *LimenCore) buildCreatePayload(ctx context.Context, schema Schema, da
 		maps.Copy(payload, schemaFields)
 	}
 	maps.Copy(payload, additionalFields)
-	maps.Copy(payload, schema.ToStorage(data))
+
+	payloadData, err := buildWritePayload(schema, data, true)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(payload, payloadData)
 
 	if err := core.assignID(ctx, schema, payload); err != nil {
+		return nil, err
+	}
+	if err := core.assignPublicID(ctx, schema, payload); err != nil {
 		return nil, err
 	}
 
@@ -66,23 +78,24 @@ func (core *LimenCore) buildCreatePayload(ctx context.Context, schema Schema, da
 	return payload, nil
 }
 
-func (core *LimenCore) Create(ctx context.Context, schema Schema, data Model, additionalFields map[string]any) error {
+func (core *LimenCore) Create(ctx context.Context, schema Schema, data any, additionalFields map[string]any) error {
 	_, err := core.CreateWithResult(ctx, schema, data, additionalFields)
 	return err
 }
 
-func (core *LimenCore) CreateWithResult(ctx context.Context, schema Schema, data Model, additionalFields map[string]any) (DatabaseResult, error) {
+func (core *LimenCore) CreateWithResult(ctx context.Context, schema Schema, data any, additionalFields map[string]any) (*DatabaseResult, error) {
 	payload, err := core.buildCreatePayload(ctx, schema, data, additionalFields)
 	if err != nil {
-		return DatabaseResult{}, err
+		return nil, err
 	}
 
 	db := core.getDB(ctx)
-	return db.Create(ctx, schema.GetTableName(), payload)
+	result, err := db.Create(ctx, schema.GetTableName(), payload)
+	return &result, err
 }
 
 // CreateAndReturn inserts data and returns the stored row, located by the unique lookupColumns set on the model.
-func (core *LimenCore) CreateAndReturn(ctx context.Context, schema Schema, data Model, additionalFields map[string]any, lookupColumns ...SchemaField) (Model, error) {
+func (core *LimenCore) CreateAndReturn(ctx context.Context, schema Schema, data any, additionalFields map[string]any, lookupColumns ...SchemaField) (Model, error) {
 	if len(lookupColumns) == 0 {
 		return nil, fmt.Errorf("CreateAndReturn: at least one lookup column is required")
 	}
@@ -107,6 +120,10 @@ func (core *LimenCore) CreateAndReturn(ctx context.Context, schema Schema, data 
 }
 
 func (core *LimenCore) Exists(ctx context.Context, schema Schema, conditions []Where) (bool, error) {
+	conditions, err := core.rewritePublicIDConditions(schema, conditions)
+	if err != nil {
+		return false, err
+	}
 	conditions = applySoftDeleteFilter(schema, conditions)
 	db := core.getDB(ctx)
 	return db.Exists(ctx, schema.GetTableName(), conditions)
@@ -128,28 +145,33 @@ func (core *LimenCore) Update(ctx context.Context, schema Schema, data any, cond
 	return err
 }
 
-func (core *LimenCore) UpdateWithResult(ctx context.Context, schema Schema, data any, conditions []Where) (DatabaseResult, error) {
+func (core *LimenCore) UpdateWithResult(ctx context.Context, schema Schema, data any, conditions []Where) (*DatabaseResult, error) {
 	if len(conditions) == 0 {
-		return DatabaseResult{}, fmt.Errorf("%w: conditions required to prevent accidental table-wide update", ErrMissingConditions)
+		return nil, fmt.Errorf("%w: conditions required to prevent accidental table-wide update", ErrMissingConditions)
 	}
 
-	payload, err := buildUpdatePayload(schema, data)
+	payload, err := buildWritePayload(schema, data, false)
 	if err != nil {
-		return DatabaseResult{}, err
+		return nil, err
 	}
 	if len(payload) == 0 {
-		return DatabaseResult{}, nil
+		return nil, nil
 	}
 	if err := validateUpdatePayload(payload); err != nil {
-		return DatabaseResult{}, err
+		return nil, err
 	}
 
+	conditions, err = core.rewritePublicIDConditions(schema, conditions)
+	if err != nil {
+		return nil, err
+	}
 	applyUpdatedAtTimestamp(schema, payload, false)
 
 	conditions = applySoftDeleteFilter(schema, conditions)
 	db := core.getDB(ctx)
 
-	return db.Update(ctx, schema.GetTableName(), conditions, payload)
+	result, err := db.Update(ctx, schema.GetTableName(), conditions, payload)
+	return &result, err
 }
 
 func (core *LimenCore) UpdateAndReturn(ctx context.Context, schema Schema, data any, conditions []Where, id any) (Model, error) {
@@ -160,7 +182,7 @@ func (core *LimenCore) UpdateAndReturn(ctx context.Context, schema Schema, data 
 	return core.FindOne(ctx, schema, []Where{Eq(schema.GetIDField(), id)}, nil)
 }
 
-func buildUpdatePayload(schema Schema, data any) (map[string]any, error) {
+func buildWritePayload(schema Schema, data any, forInsert bool) (map[string]any, error) {
 	switch v := data.(type) {
 	case map[SchemaField]any:
 		payload := make(map[string]any, len(v))
@@ -175,16 +197,18 @@ func buildUpdatePayload(schema Schema, data any) (map[string]any, error) {
 	case Model:
 		payload := make(map[string]any)
 		maps.Copy(payload, schema.ToStorage(v))
-		for key, value := range payload {
-			concreteValue := reflect.ValueOf(value)
-			// drop empty strings and zeros to avoid clobbering unset columns
-			if !concreteValue.IsValid() || concreteValue.IsZero() {
-				delete(payload, key)
+		if !forInsert {
+			for key, value := range payload {
+				concreteValue := reflect.ValueOf(value)
+				// drop empty strings and zeros to avoid clobbering unset columns
+				if !concreteValue.IsValid() || concreteValue.IsZero() {
+					delete(payload, key)
+				}
 			}
 		}
 		return payload, nil
 	default:
-		return nil, fmt.Errorf("Update: unsupported data type %T, want limen.Model or map[limen.SchemaField]any", data)
+		return nil, fmt.Errorf("unsupported data type %T, want limen.Model or map[limen.SchemaField]any", data)
 	}
 }
 
@@ -254,25 +278,36 @@ func (core *LimenCore) Delete(ctx context.Context, schema Schema, conditions []W
 	return err
 }
 
-func (core *LimenCore) DeleteWithResult(ctx context.Context, schema Schema, conditions []Where) (DatabaseResult, error) {
+func (core *LimenCore) DeleteWithResult(ctx context.Context, schema Schema, conditions []Where) (*DatabaseResult, error) {
 	if len(conditions) == 0 {
-		return DatabaseResult{}, fmt.Errorf("%w: conditions required to prevent accidental table-wide delete", ErrMissingConditions)
+		return nil, fmt.Errorf("%w: conditions required to prevent accidental table-wide delete", ErrMissingConditions)
+	}
+
+	conditions, err := core.rewritePublicIDConditions(schema, conditions)
+	if err != nil {
+		return nil, err
 	}
 
 	db := core.getDB(ctx)
 	// if there are conditions, we update the soft delete field to the current time
 	// otherwise we delete the record directly
 	if schema.GetSoftDeleteField() != "" {
-		return db.Update(ctx, schema.GetTableName(), conditions, map[string]any{
+		result, err := db.Update(ctx, schema.GetTableName(), conditions, map[string]any{
 			schema.GetSoftDeleteField(): time.Now(),
 		})
+		return &result, err
 	}
 
-	return db.Delete(ctx, schema.GetTableName(), conditions)
+	result, err := db.Delete(ctx, schema.GetTableName(), conditions)
+	return &result, err
 }
 
 func (core *LimenCore) FindMany(ctx context.Context, schema Schema, conditions []Where) ([]Model, error) {
 	db := core.getDB(ctx)
+	conditions, err := core.rewritePublicIDConditions(schema, conditions)
+	if err != nil {
+		return nil, err
+	}
 	conditions = applySoftDeleteFilter(schema, conditions)
 
 	list, err := db.FindMany(ctx, schema.GetTableName(), conditions, nil)
@@ -287,6 +322,10 @@ func (core *LimenCore) FindMany(ctx context.Context, schema Schema, conditions [
 }
 
 func (core *LimenCore) Count(ctx context.Context, schema Schema, conditions []Where) (int64, error) {
+	conditions, err := core.rewritePublicIDConditions(schema, conditions)
+	if err != nil {
+		return 0, err
+	}
 	db := core.getDB(ctx)
 	return db.Count(ctx, schema.GetTableName(), conditions)
 }
@@ -310,6 +349,10 @@ func (core *LimenCore) FindWithOptions(ctx context.Context, schema Schema, condi
 		opts = &QueryOptions{Limit: DefaultPerPage}
 	}
 
+	conditions, err := core.rewritePublicIDConditions(schema, conditions)
+	if err != nil {
+		return nil, err
+	}
 	conditions = applySoftDeleteFilter(schema, conditions)
 	db := core.getDB(ctx)
 

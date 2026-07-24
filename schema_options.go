@@ -1,5 +1,7 @@
 package limen
 
+import "cmp"
+
 // --- Schema config (top-level) ---
 
 // WithModelTransformers configures model transformers by logical schema name.
@@ -7,6 +9,35 @@ func WithModelTransformers(transformers ModelTransformers) SchemaConfigOption {
 	return func(config *SchemaConfig) {
 		config.modelTransformers = transformers
 	}
+}
+
+// WithPublicIDs configures global public identifiers.
+func WithPublicIDs(global PublicIDConfig) SchemaConfigOption {
+	return func(config *SchemaConfig) {
+		resolvedGlobal := defaultPublicIDConfig(global)
+
+		config.publicID = resolvedGlobal
+		config.publicIDDisabledFor = make(map[SchemaName]struct{}, len(resolvedGlobal.DisabledFor))
+		for _, schemaName := range resolvedGlobal.DisabledFor {
+			config.publicIDDisabledFor[schemaName] = struct{}{}
+		}
+	}
+}
+
+func defaultPublicIDConfig(config PublicIDConfig) *PublicIDConfig {
+	resolved := config
+	resolved.Field = cmp.Or(resolved.Field, SchemaPublicIDField)
+	resolved.ColumnName = cmp.Or(resolved.ColumnName, string(SchemaPublicIDField))
+	resolved.ColumnType = cmp.Or(resolved.ColumnType, ColumnTypeString)
+	resolved.ResponseField = cmp.Or(resolved.ResponseField, string(SchemaIDField))
+	defaultPublicIDDisabledFor := []SchemaName{
+		CoreSchemaAccounts,
+		CoreSchemaSessions,
+		CoreSchemaVerifications,
+		CoreSchemaRateLimits,
+	}
+	resolved.DisabledFor = append(resolved.DisabledFor, defaultPublicIDDisabledFor...)
+	return &resolved
 }
 
 // WithSchemaAdditionalFields sets the global additional fields function

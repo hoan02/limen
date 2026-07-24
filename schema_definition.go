@@ -6,14 +6,15 @@ import (
 
 // SchemaDefinition represents a complete schema definition.
 type SchemaDefinition struct {
-	TableName   SchemaTableName
-	Columns     []ColumnDefinition
-	Indexes     []IndexDefinition
-	ForeignKeys []ForeignKeyDefinition
-	SchemaName  SchemaName // Name of the schema
-	Extends     SchemaName // If extending a core schema (e.g., CoreSchemaUsers), nil for new tables
-	PluginName  string     // Name of the plugin that owns this schema, empty for core schemas
-	Schema      Schema     `json:"-"` // Schema instance (excluded from JSON serialization for CLI)
+	TableName       SchemaTableName
+	Columns         []ColumnDefinition
+	Indexes         []IndexDefinition
+	ForeignKeys     []ForeignKeyDefinition
+	SchemaName      SchemaName // Name of the schema
+	Extends         SchemaName // If extending a core schema (e.g., CoreSchemaUsers), nil for new tables
+	PluginName      string     // Name of the plugin that owns this schema, empty for core schemas
+	Schema          Schema     `json:"-"` // Schema instance (excluded from JSON serialization for CLI)
+	DisablePublicID bool       // Skip public-ID column/index injection for this schema definition
 }
 
 // For extensions, it uses the SchemaName as a temporary table name.
@@ -92,6 +93,13 @@ func NewSchemaDefinitionForExtension(schemaName SchemaName, modifiedSchema Schem
 }
 
 type SchemaDefinitionOption func(*SchemaDefinition)
+
+// WithDisablePublicID disables public-ID behavior for this schema definition.
+func WithDisablePublicID() SchemaDefinitionOption {
+	return func(d *SchemaDefinition) {
+		d.DisablePublicID = true
+	}
+}
 
 func WithSchemaIDField(config *SchemaConfig) SchemaDefinitionOption {
 	idType := config.GetIDColumnType()

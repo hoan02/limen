@@ -71,8 +71,27 @@ type apiKeySchema struct {
 	limen.BaseSchema
 }
 
-func newAPIKeySchema() *apiKeySchema {
-	return &apiKeySchema{BaseSchema: limen.BaseSchema{}}
+func newAPIKeySchema(cfg *config) *apiKeySchema {
+	return &apiKeySchema{BaseSchema: limen.BaseSchema{
+		Serializer: func(data limen.Model) map[string]any {
+			apiKey := data.(*ApiKey)
+			return map[string]any{
+				"id":           apiKey.ID,
+				"name":         apiKey.Name,
+				"profile":      apiKey.Profile,
+				"prefix":       apiKey.Prefix,
+				"last4":        apiKey.Last4,
+				"permissions":  apiKey.Permissions,
+				"enabled":      apiKey.Enabled,
+				"expires_at":   apiKey.ExpiresAt,
+				"is_expired":   apiKey.ExpiresAt != nil && apiKey.ExpiresAt.Before(time.Now()),
+				"last_used_at": apiKey.LastUsedAt,
+				"metadata":     cfg.filterMetadata(apiKey.Metadata),
+				"created_at":   apiKey.CreatedAt.Format(time.RFC3339),
+				"updated_at":   apiKey.UpdatedAt.Format(time.RFC3339),
+			}
+		},
+	}}
 }
 
 func (s *apiKeySchema) GetNameField() string {

@@ -13,6 +13,18 @@ type apiKeyHandlers struct {
 	builder   *limen.RouteBuilder
 }
 
+func (h *apiKeyHandlers) validateAPIKeyIDParam(v *limen.Validator) {
+	v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+		return limen.ValidateClientIDValue(h.plugin.core, h.plugin.apiKeySchema, value)
+	})
+}
+
+func newApiKeyCreateResponse(result *ApiKeyCreateResult, plugin *apiKeyPlugin) map[string]any {
+	payload := plugin.core.SerializeModel(plugin.apiKeySchema, result.ApiKey)
+	payload["key"] = result.Key
+	return payload
+}
+
 const MaxExpiresIn = 6307200000 // 200 years in seconds 😒 why would you need a key that long?
 
 func newApiKeyHandlers(plugin *apiKeyPlugin, httpCore *limen.LimenHTTPCore) *apiKeyHandlers {
@@ -51,10 +63,14 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
-	h.responder.JSON(w, r, http.StatusCreated, newApiKeyCreateResponse(result, h.plugin.config))
+	h.responder.JSON(w, r, http.StatusCreated, newApiKeyCreateResponse(result, h.plugin))
 }
 
 func (h *apiKeyHandlers) Get(w http.ResponseWriter, r *http.Request) {
+	if limen.ValidateRequest(w, r, h.responder, h.validateAPIKeyIDParam) == nil {
+		return
+	}
+
 	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		h.responder.Error(w, r, err)
@@ -67,7 +83,7 @@ func (h *apiKeyHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(apiKey, h.plugin.config))
+	h.responder.JSON(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.apiKeySchema, apiKey))
 }
 
 func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
@@ -92,11 +108,18 @@ func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyPageResponse(page, h.plugin.config))
+	h.responder.JSON(w, r, http.StatusOK, &limen.Page[map[string]any]{
+		Items:      limen.SerializeModels(h.plugin.core, h.plugin.apiKeySchema, page.Items),
+		Total:      page.Total,
+		Page:       page.Page,
+		PerPage:    page.PerPage,
+		TotalPages: page.TotalPages,
+	})
 }
 
 func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 	body := limen.BindAndValidate[ApiKeyUpdateRequest](w, r, h.responder, func(v *limen.Validator) {
+		h.validateAPIKeyIDParam(v)
 		v.Field("name").Optional().String()
 		v.Field("permissions").Optional().Object()
 		v.Field("all_permissions").Optional().Boolean()
@@ -120,10 +143,14 @@ func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyResponse(result, h.plugin.config))
+	h.responder.JSON(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.apiKeySchema, result))
 }
 
 func (h *apiKeyHandlers) Revoke(w http.ResponseWriter, r *http.Request) {
+	if limen.ValidateRequest(w, r, h.responder, h.validateAPIKeyIDParam) == nil {
+		return
+	}
+
 	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		h.responder.Error(w, r, err)
@@ -141,6 +168,7 @@ func (h *apiKeyHandlers) Revoke(w http.ResponseWriter, r *http.Request) {
 
 func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 	body := limen.BindAndValidate[ApiKeyRotateRequest](w, r, h.responder, func(v *limen.Validator) {
+		h.validateAPIKeyIDParam(v)
 		v.Field("expires_in").Nullable().Number().Min(5 * 60).Max(MaxExpiresIn)
 		v.Field("permissions").Optional().Object()
 		v.Field("all_permissions").Optional().Boolean()
@@ -163,5 +191,5 @@ func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
-	h.responder.JSON(w, r, http.StatusOK, newApiKeyCreateResponse(result, h.plugin.config))
+	h.responder.JSON(w, r, http.StatusOK, newApiKeyCreateResponse(result, h.plugin))
 }

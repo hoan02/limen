@@ -1,8 +1,14 @@
 package limen
 
+import (
+	"context"
+	"maps"
+)
+
 type SchemaDefinitionMap map[SchemaName]SchemaDefinition
 
 type Schema interface {
+	GetSchemaName() SchemaName
 	GetTableName() SchemaTableName
 	GetField(name SchemaField) string
 	ToStorage(data Model) map[string]any
@@ -27,6 +33,25 @@ type ModelTransformer func(model Model) map[string]any
 // ModelTransformers maps logical schema names to model transformers.
 type ModelTransformers map[SchemaName]ModelTransformer
 
+type PublicIDGenerator func(ctx context.Context, schemaName SchemaName) (string, error)
+type PublicIDMatcher func(schemaName SchemaName, value string) bool
+type PublicIDEncoder func(schemaName SchemaName, value string) string
+type PublicIDDecoder func(schemaName SchemaName, publicID string) (string, error)
+
+type PublicIDConfig struct {
+	Disabled                 bool
+	DisabledFor              []SchemaName
+	Field                    SchemaField
+	ColumnName               string
+	ColumnType               ColumnType
+	Generator                PublicIDGenerator
+	Matcher                  PublicIDMatcher
+	Encoder                  PublicIDEncoder
+	Decoder                  PublicIDDecoder
+	ResponseField            string
+	DisableResponseTransform bool
+}
+
 type BaseSchema struct {
 	// A function to return a map of additional fields to be added to the schema when creating a record. e.g:
 	//  func(ctx context.Context) map[string]any {
@@ -44,6 +69,13 @@ type BaseSchema struct {
 
 	// A function to serialize the model to a json object for returning to the client
 	Serializer ModelTransformer
+}
+
+func (b *BaseSchema) GetSchemaName() SchemaName {
+	if b.schemaInfo == nil {
+		return ""
+	}
+	return b.schemaInfo.schemaName
 }
 
 func (b *BaseSchema) GetTableName() SchemaTableName {
@@ -91,7 +123,7 @@ func (b *BaseSchema) Serialize(data Model) map[string]any {
 	if b.Serializer != nil {
 		return b.Serializer(data)
 	}
-	return data.Raw()
+	return maps.Clone(data.Raw())
 }
 
 func (b *BaseSchema) Initialize(schemaInfo *SchemaInfo) error {

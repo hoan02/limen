@@ -39,6 +39,9 @@ type SchemaConfig struct {
 	pluginSchemas map[PluginName]map[SchemaName]PluginSchemaConfig
 	// Model transformers by logical schema name
 	modelTransformers ModelTransformers
+	// Resolved global public-ID configuration.
+	publicID            *PublicIDConfig
+	publicIDDisabledFor map[SchemaName]struct{}
 }
 
 type SchemaConfigOption func(*SchemaConfig)
@@ -69,6 +72,16 @@ func (c *SchemaConfig) GetIDColumnType() ColumnType {
 		return c.IDGenerator.GetColumnType()
 	}
 	return ColumnTypeInt64
+}
+
+func (c *SchemaConfig) getPublicIDConfig(schemaName SchemaName) (*PublicIDConfig, bool) {
+	if c.publicID == nil || c.publicID.Disabled {
+		return nil, false
+	}
+	if _, disabled := c.publicIDDisabledFor[schemaName]; disabled {
+		return nil, false
+	}
+	return c.publicID, true
 }
 
 // getCoreSchemaCustomizationField returns the customized column name for a core schema field if set
