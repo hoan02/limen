@@ -50,7 +50,7 @@ func (h *apiKeyHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -71,7 +71,7 @@ func (h *apiKeyHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -96,7 +96,7 @@ func (h *apiKeyHandlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -131,7 +131,7 @@ func (h *apiKeyHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -151,7 +151,7 @@ func (h *apiKeyHandlers) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -178,7 +178,7 @@ func (h *apiKeyHandlers) Rotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return

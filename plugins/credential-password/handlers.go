@@ -209,7 +209,7 @@ func (p *credentialPasswordHandlers) ChangePassword(w http.ResponseWriter, r *ht
 		revokeOtherSessions = value
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		p.responder.Error(w, r, err)
 		return
@@ -255,7 +255,7 @@ func (p *credentialPasswordHandlers) SetPassword(w http.ResponseWriter, r *http.
 		revokeOtherSessions = value
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		p.responder.Error(w, r, err)
 		return

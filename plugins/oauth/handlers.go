@@ -71,7 +71,7 @@ func (h *oauthHandlers) Callback(w http.ResponseWriter, r *http.Request) {
 
 // LinkAccountWithOAuth initiates the OAuth flow for linking a provider to the current user's account.
 func (h *oauthHandlers) LinkAccountWithOAuth(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -98,7 +98,7 @@ func (h *oauthHandlers) LinkAccountWithOAuth(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *oauthHandlers) ListAccounts(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -114,7 +114,7 @@ func (h *oauthHandlers) ListAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *oauthHandlers) UnlinkAccount(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -132,7 +132,7 @@ func (h *oauthHandlers) UnlinkAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *oauthHandlers) GetTokens(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -150,7 +150,7 @@ func (h *oauthHandlers) GetTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *oauthHandlers) RefreshAccessToken(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return

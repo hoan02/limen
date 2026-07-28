@@ -29,7 +29,7 @@ func (a *twoFactorHandlers) InitiateTwoFactorSetup(w http.ResponseWriter, r *htt
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		a.responder.Error(w, r, err)
 		return
@@ -54,7 +54,7 @@ func (a *twoFactorHandlers) FinalizeTwoFactorSetup(w http.ResponseWriter, r *htt
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		a.responder.Error(w, r, err)
 		return
@@ -86,7 +86,7 @@ func (a *twoFactorHandlers) Disable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		a.responder.Error(w, r, err)
 		return
