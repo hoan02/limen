@@ -2,6 +2,7 @@ package organization
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/thecodearcher/limen"
 )
@@ -79,9 +80,10 @@ func (o *organizationPlugin) createOrganizationOwner(ctx context.Context, user *
 		return nil, ErrOwnerRoleNotFound
 	}
 
+	ownerRoleName := ownerRole.Name()
 	if err := o.core.Create(ctx, o.memberRoleSchema, &MemberRole{
 		MemberID: memberModel.(*Member).ID,
-		Role:     ownerRole.Name(),
+		Role:     &ownerRoleName,
 	}, nil); err != nil {
 		return nil, err
 	}
@@ -117,6 +119,10 @@ func (o *organizationPlugin) ListOrganizations(ctx context.Context, user *limen.
 		return nil, err
 	}
 
+	if len(memberships) == 0 {
+		return limen.EmptyPage[*Organization](opts), nil
+	}
+
 	orgIds := make([]any, len(memberships))
 	for i, membership := range memberships {
 		orgIds[i] = membership.(*Member).OrganizationID
@@ -132,4 +138,15 @@ func (o *organizationPlugin) ListOrganizations(ctx context.Context, user *limen.
 
 	organizations, err := o.core.FindWithOptions(ctx, o.organizationSchema, conditions, opts)
 	return limen.MapPage[*Organization](organizations), err
+}
+
+func (o *organizationPlugin) GetOrganization(ctx context.Context, organizationID any) (*Organization, error) {
+	organization, err := o.core.FindOne(ctx, o.organizationSchema, []limen.Where{
+		limen.Eq(o.organizationSchema.GetIDField(), organizationID),
+		limen.Eq(o.organizationSchema.GetSlugField(), fmt.Sprintf("%v", organizationID)).Or(),
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return organization.(*Organization), nil
 }

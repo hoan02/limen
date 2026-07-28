@@ -501,3 +501,7 @@ func ParseJSONFromStorage[T any](data map[string]any, field string) T {
 	}
 	return zero
 }
+
+func EmptyPage[T any](opts *QueryOptions) *Page[T] {
+	return newPage([]T{}, 0, opts)
+}

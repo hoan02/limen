@@ -1,9 +1,13 @@
 package organization
 
 import (
+	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/thecodearcher/limen"
+	"github.com/thecodearcher/limen/access"
 )
 
 type Member struct {
@@ -13,6 +17,11 @@ type Member struct {
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
+
+	// only set if loaded with relations is true
+	Roles        []*access.Role
+	User         *limen.User
+	Organization *Organization
 
 	raw map[string]any
 }
@@ -32,8 +41,58 @@ type memberSchema struct {
 	limen.BaseSchema
 }
 
-func newMemberSchema() *memberSchema {
-	return &memberSchema{BaseSchema: limen.BaseSchema{}}
+func newMemberSchema(schema *limen.SchemaConfig, plugin *organizationPlugin) *memberSchema {
+	return &memberSchema{
+		BaseSchema: limen.BaseSchema{
+			Serializer: memberSerializer(schema, plugin),
+		},
+	}
+}
+
+func memberSerializer(schema *limen.SchemaConfig, plugin *organizationPlugin) limen.ModelTransformer {
+	return limen.ModelTransformer(func(data limen.Model) map[string]any {
+		member := data.(*Member)
+		payload := maps.Clone(member.raw)
+
+		if member.Roles != nil {
+			serializedRoles := memberRolesSerializer(member)
+			payload["roles"] = serializedRoles["roles"]
+			payload["permissions"] = serializedRoles["permissions"]
+		}
+
+		if member.Organization != nil {
+			payload["organization"] = plugin.core.SerializeModel(plugin.organizationSchema, member.Organization)
+		}
+
+		if member.User != nil {
+			payload["user"] = plugin.core.SerializeModel(schema.User, member.User)
+		}
+
+		delete(payload, "organization_id")
+		delete(payload, "user_id")
+		return payload
+	})
+}
+
+func memberRolesSerializer(member *Member) map[string]any {
+	roles := member.Roles
+	roleNames := make([]string, len(roles))
+	permissions := make([]string, 0)
+
+	for i, role := range roles {
+		roleNames[i] = role.Name()
+		for resource, actions := range role.Permissions() {
+			for _, action := range actions {
+				permissions = append(permissions, fmt.Sprintf("%s:%s", resource, action))
+			}
+		}
+	}
+
+	slices.Sort(permissions)
+	return map[string]any{
+		"roles":       roleNames,
+		"permissions": permissions,
+	}
 }
 
 func (s *memberSchema) GetOrganizationIDField() string {

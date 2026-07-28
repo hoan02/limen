@@ -7,18 +7,6 @@ import (
 	"github.com/thecodearcher/limen/access"
 )
 
-type Role access.Role
-
-type InvitationStatus string
-
-const (
-	InvitationStatusPending   InvitationStatus = "pending"
-	InvitationStatusAccepted  InvitationStatus = "accepted"
-	InvitationStatusRejected  InvitationStatus = "rejected"
-	InvitationStatusCancelled InvitationStatus = "canceled"
-	InvitationStatusExpired   InvitationStatus = "expired"
-)
-
 type CreateOrganizationRequest struct {
 	Name             string         `json:"name"`
 	Slug             string         `json:"slug"`

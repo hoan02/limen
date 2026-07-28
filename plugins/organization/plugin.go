@@ -2,6 +2,7 @@ package organization
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/thecodearcher/limen"
 	"github.com/thecodearcher/limen/access"
@@ -18,7 +19,9 @@ type organizationPlugin struct {
 	memberRoleSchema       *memberRoleSchema
 	organizationRoleSchema *organizationRoleSchema
 	invitationSchema       *invitationSchema
+	sessionSchema          *limen.SessionSchema
 	hooks                  *Hooks
+	responder              *limen.Responder
 }
 
 func New(opts ...ConfigOption) *organizationPlugin {
@@ -42,18 +45,17 @@ func (p *organizationPlugin) Name() limen.PluginName {
 
 func (p *organizationPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.SchemaIntrospector {
 	p.organizationSchema = newOrganizationSchema()
-	p.memberSchema = newMemberSchema()
+	p.memberSchema = newMemberSchema(schema, p)
 	p.memberRoleSchema = newMemberRoleSchema()
 	p.organizationRoleSchema = newOrganizationRoleSchema()
 	p.invitationSchema = newInvitationSchema()
-
+	p.sessionSchema = schema.Session
 	return []limen.SchemaIntrospector{
 		buildOrganizationTableDef(schema, p.organizationSchema),
 		buildOrganizationRoleTableDef(schema, p.organizationRoleSchema),
 		buildMemberTableDef(schema, p.memberSchema),
 		buildMemberRoleTableDef(schema, p.memberRoleSchema),
 		buildInvitationTableDef(schema, p.invitationSchema),
-		buildSessionActiveOrgExtension(schema),
 	}
 }
 
@@ -83,4 +85,11 @@ func (p *organizationPlugin) getOwnerRole() *access.Role {
 		}
 	}
 	return nil
+}
+
+func (o *organizationPlugin) clientOrganizationID(org *Organization) string {
+	if encoded, ok := o.core.EncodePublicID(o.organizationSchema, org); ok {
+		return encoded
+	}
+	return fmt.Sprintf("%v", org.ID)
 }

@@ -8,6 +8,7 @@ import (
 
 // Role is a named, immutable set of granted permissions.
 type Role struct {
+	id          any
 	name        string
 	permissions Permissions
 }
@@ -36,6 +37,19 @@ func (ac *AccessControl) NewRole(name string, perms Permissions) (Role, error) {
 	}
 
 	return Role{name: name, permissions: MergePermissions(perms)}, nil
+}
+
+func (ac *AccessControl) NewRoleWithID(id any, name string, perms Permissions) (Role, error) {
+	r, err := ac.NewRole(name, perms)
+	if err != nil {
+		return Role{}, err
+	}
+	r.id = id
+	return r, nil
+}
+
+func (r Role) ID() any {
+	return r.id
 }
 
 // Name returns the role's name.

@@ -7,10 +7,11 @@ import (
 )
 
 type MemberRole struct {
-	ID             any
-	OrganizationID any
-	MemberID       any
-	Role           string
+	ID                 any
+	OrganizationID     any
+	MemberID           any
+	Role               *string
+	OrganizationRoleID any
 
 	CreatedAt time.Time
 
@@ -24,8 +25,9 @@ func (r *MemberRole) Raw() map[string]any {
 const (
 	MemberRoleSchemaTableName limen.SchemaTableName = "organization_member_roles"
 
-	MemberRoleSchemaMemberIDField limen.SchemaField = "member_id"
-	MemberRoleSchemaRoleField     limen.SchemaField = "role"
+	MemberRoleSchemaMemberIDField           limen.SchemaField = "member_id"
+	MemberRoleSchemaRoleField               limen.SchemaField = "role"
+	MemberRoleSchemaOrganizationRoleIDField limen.SchemaField = "organization_role_id"
 )
 
 type memberRoleSchema struct {
@@ -39,26 +41,35 @@ func newMemberRoleSchema() *memberRoleSchema {
 func (s *memberRoleSchema) GetMemberIDField() string {
 	return s.GetField(MemberRoleSchemaMemberIDField)
 }
-func (s *memberRoleSchema) GetRoleField() string { return s.GetField(MemberRoleSchemaRoleField) }
+func (s *memberRoleSchema) GetRoleField() string {
+	return s.GetField(MemberRoleSchemaRoleField)
+}
+
 func (s *memberRoleSchema) GetCreatedAtField() string {
 	return s.GetField(limen.SchemaCreatedAtField)
+}
+
+func (s *memberRoleSchema) GetOrganizationRoleIDField() string {
+	return s.GetField(MemberRoleSchemaOrganizationRoleIDField)
 }
 
 func (s *memberRoleSchema) ToStorage(data limen.Model) map[string]any {
 	memberRole := data.(*MemberRole)
 	return map[string]any{
-		s.GetMemberIDField(): memberRole.MemberID,
-		s.GetRoleField():     memberRole.Role,
+		s.GetMemberIDField():           memberRole.MemberID,
+		s.GetRoleField():               memberRole.Role,
+		s.GetOrganizationRoleIDField(): memberRole.OrganizationRoleID,
 	}
 }
 
 func (s *memberRoleSchema) FromStorage(data map[string]any) limen.Model {
 	return &MemberRole{
-		ID:        data[s.GetIDField()],
-		MemberID:  limen.GetValue[any](data[s.GetMemberIDField()]),
-		Role:      limen.GetValue[string](data[s.GetRoleField()]),
-		CreatedAt: limen.GetValue[time.Time](data[s.GetCreatedAtField()]),
-		raw:       data,
+		ID:                 data[s.GetIDField()],
+		MemberID:           limen.GetValue[any](data[s.GetMemberIDField()]),
+		Role:               limen.GetNullableValue[string](data[s.GetRoleField()]),
+		OrganizationRoleID: limen.GetValue[any](data[s.GetOrganizationRoleIDField()]),
+		CreatedAt:          limen.GetValue[time.Time](data[s.GetCreatedAtField()]),
+		raw:                data,
 	}
 }
 
@@ -69,12 +80,27 @@ func buildMemberRoleTableDef(schemaConfig *limen.SchemaConfig, schema *memberRol
 		schema,
 		limen.WithSchemaIDField(schemaConfig),
 		limen.WithSchemaField(MemberRoleSchemaMemberIDField, schemaConfig.GetIDColumnType()),
-		limen.WithSchemaField(MemberRoleSchemaRoleField, limen.ColumnTypeString),
+		limen.WithSchemaField(MemberRoleSchemaOrganizationRoleIDField, schemaConfig.GetIDColumnType(), limen.WithNullable(true)),
+		limen.WithSchemaField(MemberRoleSchemaRoleField, limen.ColumnTypeString, limen.WithNullable(true)),
 		limen.WithSchemaCreatedAtField(),
 
 		limen.WithSchemaUniqueIndex("idx_organization_member_roles_member_role", []limen.SchemaField{
 			MemberRoleSchemaMemberIDField,
 			MemberRoleSchemaRoleField,
+		}),
+
+		limen.WithSchemaUniqueIndex("idx_organization_member_roles_member_dynamic_role", []limen.SchemaField{
+			MemberRoleSchemaMemberIDField,
+			MemberRoleSchemaOrganizationRoleIDField,
+		}),
+
+		limen.WithSchemaForeignKey(limen.ForeignKeyDefinition{
+			Name:             "fk_organization_member_roles_organization_role",
+			Column:           MemberRoleSchemaOrganizationRoleIDField,
+			ReferencedSchema: limen.SchemaName(OrganizationRoleSchemaTableName),
+			ReferencedField:  limen.SchemaIDField,
+			OnDelete:         limen.FKActionCascade,
+			OnUpdate:         limen.FKActionCascade,
 		}),
 
 		limen.WithSchemaForeignKey(limen.ForeignKeyDefinition{
