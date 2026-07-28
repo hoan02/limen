@@ -161,7 +161,7 @@ func (h *DatabaseActionHelper) CreateSession(ctx context.Context, data *Session,
 	return nil
 }
 
-func (h *DatabaseActionHelper) UpdateSession(ctx context.Context, data *Session, conditions []Where) error {
+func (h *DatabaseActionHelper) UpdateSession(ctx context.Context, data any, conditions []Where) error {
 	if err := h.core.Update(ctx, h.core.Schema.Session, data, conditions); err != nil {
 		return err
 	}
