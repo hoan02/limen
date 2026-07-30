@@ -109,7 +109,11 @@ func MergePermissions(permissions ...Permissions) Permissions {
 				out[resource] = []string{Wildcard}
 				continue
 			}
-			out[resource] = append(out[resource], actions...)
+			for _, action := range actions {
+				if !slices.Contains(out[resource], action) {
+					out[resource] = append(out[resource], action)
+				}
+			}
 		}
 	}
 	return out
