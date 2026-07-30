@@ -8,9 +8,15 @@ const (
 type InvitationStatus string
 
 const (
-	InvitationStatusPending   InvitationStatus = "pending"
-	InvitationStatusAccepted  InvitationStatus = "accepted"
-	InvitationStatusRejected  InvitationStatus = "rejected"
-	InvitationStatusCancelled InvitationStatus = "canceled"
-	InvitationStatusExpired   InvitationStatus = "expired"
+	InvitationStatusPending  InvitationStatus = "pending"
+	InvitationStatusAccepted InvitationStatus = "accepted"
+	InvitationStatusRejected InvitationStatus = "rejected"
+	InvitationStatusCanceled InvitationStatus = "canceled"
+)
+
+type InvitationResponse string
+
+const (
+	InvitationResponseAccept InvitationResponse = "accept"
+	InvitationResponseReject InvitationResponse = "reject"
 )

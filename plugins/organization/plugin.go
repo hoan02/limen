@@ -26,10 +26,13 @@ type organizationPlugin struct {
 
 func New(opts ...ConfigOption) *organizationPlugin {
 	config := &config{
-		hooks:         Hooks{},
-		accessControl: access.New(defaultStatements),
-		ownerRole:     roleNameOwner,
-		maxOrgPerUser: 0,
+		hooks:                          Hooks{},
+		accessControl:                  access.New(defaultStatements),
+		ownerRole:                      roleNameOwner,
+		maxOrgPerUser:                  0,
+		maxMembersPerOrganization:      0,
+		invitationExpirationSeconds:    7 * 24 * 60 * 60,
+		cancelPendingInviteOnNewInvite: false,
 	}
 
 	for _, opt := range opts {
@@ -48,7 +51,7 @@ func (p *organizationPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.Sche
 	p.memberSchema = newMemberSchema(schema, p)
 	p.memberRoleSchema = newMemberRoleSchema()
 	p.organizationRoleSchema = newOrganizationRoleSchema()
-	p.invitationSchema = newInvitationSchema()
+	p.invitationSchema = newInvitationSchema(p)
 	p.sessionSchema = schema.Session
 	return []limen.SchemaIntrospector{
 		buildOrganizationTableDef(schema, p.organizationSchema),
@@ -75,6 +78,10 @@ func (p *organizationPlugin) Initialize(core *limen.LimenCore) error {
 		p.config.roles = roles
 	}
 
+	if p.getOwnerRole() == nil {
+		return errors.New("organization: owner role must be provided")
+	}
+
 	return nil
 }
 
@@ -92,4 +99,8 @@ func (o *organizationPlugin) clientOrganizationID(org *Organization) string {
 		return encoded
 	}
 	return fmt.Sprintf("%v", org.ID)
+}
+
+func perms(specs ...string) access.Permissions {
+	return access.P(specs...)
 }

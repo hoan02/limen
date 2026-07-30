@@ -19,4 +19,14 @@ var (
 	ErrInsufficientPermission = limen.NewLimenError("You do not have permission to access this resource", http.StatusForbidden, nil)
 
 	ErrMemberNotInOrganization = limen.NewLimenError("You are not a member of this organization", http.StatusForbidden, nil)
+	ErrFailedToResolveRoles    = limen.NewLimenError("Invalid role provided", http.StatusBadRequest, nil)
+
+	ErrUserCannotInviteOwner = limen.NewLimenError("You cannot invite the owner role. Only existing owners can invite a new owner.", http.StatusForbidden, nil)
+
+	ErrInvitationAlreadyExists = limen.NewLimenError("Invitation already exists", http.StatusConflict, nil)
+	ErrInvitationEmailMismatch = limen.NewLimenError("This invitation was sent to a different email address", http.StatusForbidden, nil)
+	ErrInvalidInvitation       = limen.NewLimenError("This invitation is no longer valid", http.StatusForbidden, nil)
+
+	ErrUserAlreadyInOrganization        = limen.NewLimenError("This email address is already in use in this organization", http.StatusConflict, nil)
+	ErrMaxMembersPerOrganizationReached = limen.NewLimenError("The organization has reached the maximum number of members", http.StatusForbidden, nil)
 )

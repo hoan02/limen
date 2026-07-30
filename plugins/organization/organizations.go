@@ -2,7 +2,6 @@ package organization
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/thecodearcher/limen"
 )
@@ -143,7 +142,6 @@ func (o *organizationPlugin) ListOrganizations(ctx context.Context, user *limen.
 func (o *organizationPlugin) GetOrganization(ctx context.Context, organizationID any) (*Organization, error) {
 	organization, err := o.core.FindOne(ctx, o.organizationSchema, []limen.Where{
 		limen.Eq(o.organizationSchema.GetIDField(), organizationID),
-		limen.Eq(o.organizationSchema.GetSlugField(), fmt.Sprintf("%v", organizationID)).Or(),
 	}, nil)
 	if err != nil {
 		return nil, err

@@ -2,14 +2,12 @@ package organization
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 
 	"github.com/thecodearcher/limen"
 	"github.com/thecodearcher/limen/access"
 )
 
-func (o *organizationPlugin) CreateMember(ctx context.Context, user *limen.User, organization *Organization, role string) (*Member, error) {
+func (o *organizationPlugin) CreateMember(ctx context.Context, user *limen.User, organization *Organization, role any) (*Member, error) {
 	existing, err := o.core.Exists(ctx, o.memberSchema, []limen.Where{
 		limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
 		limen.Eq(o.memberSchema.GetUserIDField(), user.ID),
@@ -23,7 +21,7 @@ func (o *organizationPlugin) CreateMember(ctx context.Context, user *limen.User,
 	}
 
 	var member *Member
-	roleObj, err := o.resolveRole(ctx, role)
+	resolvedRoles, err := o.resolveRoles(ctx, organization, []any{role})
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +35,7 @@ func (o *organizationPlugin) CreateMember(ctx context.Context, user *limen.User,
 		}
 
 		member = memberModel.(*Member)
-		return o.AssignMemberRole(ctx, member, roleObj)
+		return o.AssignMemberRole(ctx, member, resolvedRoles[0])
 	})
 
 	if err != nil {
@@ -51,6 +49,7 @@ func (o *organizationPlugin) AssignMemberRole(ctx context.Context, member *Membe
 	existing, err := o.core.Exists(ctx, o.memberRoleSchema, []limen.Where{
 		limen.Eq(o.memberRoleSchema.GetMemberIDField(), member.ID),
 		limen.Eq(o.memberRoleSchema.GetRoleField(), role.Name()),
+		limen.Eq(o.memberRoleSchema.GetOrganizationRoleIDField(), role.ID()).Or(),
 	})
 
 	if err != nil {
@@ -62,8 +61,9 @@ func (o *organizationPlugin) AssignMemberRole(ctx context.Context, member *Membe
 
 	roleName := role.Name()
 	return o.core.Create(ctx, o.memberRoleSchema, &MemberRole{
-		MemberID: member.ID,
-		Role:     &roleName,
+		MemberID:           member.ID,
+		Role:               &roleName,
+		OrganizationRoleID: role.ID(),
 	}, nil)
 }
 
@@ -200,13 +200,4 @@ func (o *organizationPlugin) attachMemberUsers(ctx context.Context, members []*M
 		member.User = usersByID[member.UserID]
 	}
 	return nil
-}
-
-func (o *organizationPlugin) resolveRole(ctx context.Context, role string) (*access.Role, error) {
-	for _, r := range o.config.roles {
-		if r.Name() == role {
-			return &r, nil
-		}
-	}
-	return nil, limen.NewLimenError(fmt.Sprintf("Role %s not found", role), http.StatusNotFound, nil)
 }

@@ -2,6 +2,7 @@ package organization
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/thecodearcher/limen"
@@ -19,7 +20,7 @@ func WithActiveOrganization(ctx context.Context, session *limen.ValidatedSession
 	return context.WithValue(ctx, activeOrganizationContextKey{}, &SessionActiveOrganization{Session: session, Organization: organization})
 }
 
-func GetActiveOrganizationFromCtx(ctx context.Context) (*SessionActiveOrganization, error) {
+func GetActiveOrganizationSessionFromCtx(ctx context.Context) (*SessionActiveOrganization, error) {
 	activeOrganization := ctx.Value(activeOrganizationContextKey{})
 	if activeOrganization == nil {
 		return nil, ErrNoActiveOrganization
@@ -27,7 +28,7 @@ func GetActiveOrganizationFromCtx(ctx context.Context) (*SessionActiveOrganizati
 	return activeOrganization.(*SessionActiveOrganization), nil
 }
 
-func CurrentOrganizationIDFromCtx(ctx context.Context) (*limen.ValidatedSession, any, error) {
+func GetActiveOrganizationIDFromCtx(ctx context.Context) (*limen.ValidatedSession, any, error) {
 	session, err := limen.GetCurrentSessionFromCtx(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -41,7 +42,7 @@ func CurrentOrganizationIDFromCtx(ctx context.Context) (*limen.ValidatedSession,
 func (o *organizationPlugin) HasPermissionMiddleware(permissions access.Permissions) limen.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := CurrentOrganizationIDFromCtx(r.Context())
+			session, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
 			if err != nil {
 				o.responder.Error(w, r, err)
 				return
@@ -60,7 +61,7 @@ func (o *organizationPlugin) HasPermissionMiddleware(permissions access.Permissi
 func (o *organizationPlugin) CanAccessOrganizationMiddleware() limen.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := CurrentOrganizationIDFromCtx(r.Context())
+			session, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
 			if err != nil {
 				o.responder.Error(w, r, err)
 				return
@@ -70,6 +71,35 @@ func (o *organizationPlugin) CanAccessOrganizationMiddleware() limen.Middleware 
 				o.responder.Error(w, r, err)
 				return
 			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func (o *organizationPlugin) RequireActiveOrganizationMiddleware() limen.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			session, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
+			if err != nil {
+				o.responder.Error(w, r, err)
+				return
+			}
+
+			if err := o.CheckMemberExistsInOrganization(r.Context(), organizationID, session.User.ID); err != nil {
+				o.responder.Error(w, r, err)
+				return
+			}
+
+			organization, err := o.GetOrganization(r.Context(), organizationID)
+			if err != nil {
+				if errors.Is(err, limen.ErrRecordNotFound) {
+					o.responder.Error(w, r, ErrNoActiveOrganization)
+					return
+				}
+				o.responder.Error(w, r, err)
+				return
+			}
+			r = r.WithContext(WithActiveOrganization(r.Context(), session, organization))
 			next.ServeHTTP(w, r)
 		})
 	}

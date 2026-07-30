@@ -4,10 +4,37 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/thecodearcher/limen"
 	"github.com/thecodearcher/limen/access"
 )
+
+func (o *organizationPlugin) GetOrganizationDynamicRoles(ctx context.Context, organization *Organization, roleIDs []any) ([]*access.Role, error) {
+	conditions := []limen.Where{
+		limen.Eq(o.organizationRoleSchema.GetOrganizationIDField(), organization.ID),
+	}
+	if len(roleIDs) > 0 {
+		conditions = append(conditions, limen.In(o.organizationRoleSchema.GetIDField(), roleIDs))
+	}
+	organizationRoles, err := o.core.FindMany(ctx, o.organizationRoleSchema, conditions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	dynamicRoles := make([]*access.Role, 0, len(organizationRoles))
+	for _, model := range organizationRoles {
+		orgRole := model.(*OrganizationRole)
+		role, err := o.config.accessControl.NewRoleWithID(orgRole.ID, orgRole.Name, orgRole.Permissions)
+		if err != nil {
+			return nil, err
+		}
+		dynamicRoles = append(dynamicRoles, &role)
+	}
+
+	return dynamicRoles, nil
+}
 
 func (o *organizationPlugin) resolveMemberStaticRole(memberRole *MemberRole) (*access.Role, error) {
 	for _, role := range o.config.roles {
@@ -80,4 +107,46 @@ func (o *organizationPlugin) composeMemberRoles(memberRoles []*MemberRole, dynam
 		}
 	}
 	return resolved
+}
+
+func (o *organizationPlugin) resolveRoles(ctx context.Context, organization *Organization, roles []any) ([]*access.Role, error) {
+	resolvedRoles := make([]*access.Role, 0)
+
+	possiblyDynamicRoleIDs := make([]any, 0)
+
+	for _, role := range roles {
+		if name, ok := role.(string); ok {
+			if i := slices.IndexFunc(o.config.roles, func(r access.Role) bool {
+				return r.Name() == name
+			}); i != -1 {
+				resolvedRoles = append(resolvedRoles, &o.config.roles[i])
+				continue
+			}
+
+			if o.core.IsPublicID(o.organizationRoleSchema, name) {
+				possiblyDynamicRoleIDs = append(possiblyDynamicRoleIDs, name)
+				continue
+			}
+		}
+
+		if !o.core.Schema.MatchesIDColumnType(role) {
+			return nil, ErrFailedToResolveRoles
+		}
+		possiblyDynamicRoleIDs = append(possiblyDynamicRoleIDs, role)
+	}
+
+	if len(resolvedRoles) == len(roles) {
+		return resolvedRoles, nil
+	}
+
+	dynamicRoles, err := o.GetOrganizationDynamicRoles(ctx, organization, possiblyDynamicRoleIDs)
+	if err != nil {
+		return nil, err
+	}
+	resolvedRoles = append(resolvedRoles, dynamicRoles...)
+
+	if len(resolvedRoles) != len(roles) {
+		return nil, ErrFailedToResolveRoles
+	}
+	return resolvedRoles, nil
 }

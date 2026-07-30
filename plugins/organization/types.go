@@ -18,19 +18,37 @@ type ListOrganizationsFilter struct {
 	Name *string `json:"name,omitempty"`
 }
 
+type SendInvitationMailData struct {
+	Inviter      *limen.User
+	Organization *Organization
+	Invitation   *Invitation
+}
+
+type MaxMembersPerOrganizationFunc func(ctx context.Context, organization *Organization) int
+
 type config struct {
-	accessControl    *access.AccessControl
-	roles            []access.Role
-	slugGenerator    func(name string) string
-	hooks            Hooks
-	ownerRole        string
-	maxOrgPerUser    int
-	allowOrgCreation func(ctx context.Context, user *limen.User) bool
+	accessControl                  *access.AccessControl
+	roles                          []access.Role
+	slugGenerator                  func(name string) string
+	hooks                          Hooks
+	ownerRole                      string
+	maxOrgPerUser                  int
+	maxMembersPerOrganization      any
+	allowOrgCreation               func(ctx context.Context, user *limen.User) bool
+	sendInvitationMail             func(ctx context.Context, data *SendInvitationMailData)
+	cancelPendingInviteOnNewInvite bool
+	invitationExpirationSeconds    int
 }
 
 type Hooks struct {
 	BeforeCreateOrganization func(ctx context.Context, user *limen.User, request *CreateOrganizationRequest) error
 	AfterCreateOrganization  func(ctx context.Context, organization *Organization, user *limen.User, owner *Member)
+
+	BeforeCreateInvitation func(ctx context.Context, user *limen.User, organization *Organization, request *CreateInvitationRequest) error
+	AfterCreateInvitation  func(ctx context.Context, invitation *Invitation, user *limen.User, organization *Organization)
+
+	BeforeRespondToInvitation func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation, response InvitationResponse) error
+	AfterRespondToInvitation  func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation, response InvitationResponse)
 }
 
 type ConfigOption func(*config)
@@ -76,5 +94,37 @@ func WithMaxOrgPerUser(maxOrgPerUser int) ConfigOption {
 func WithAllowOrgCreation(allowOrgCreation func(ctx context.Context, user *limen.User) bool) ConfigOption {
 	return func(c *config) {
 		c.allowOrgCreation = allowOrgCreation
+	}
+}
+
+func WithSendInvitationMail(sendInvitationMail func(ctx context.Context, data *SendInvitationMailData)) ConfigOption {
+	return func(c *config) {
+		c.sendInvitationMail = sendInvitationMail
+	}
+}
+
+func WithCancelPendingInviteOnNewInvite(cancelPendingInviteOnNewInvite bool) ConfigOption {
+	return func(c *config) {
+		c.cancelPendingInviteOnNewInvite = cancelPendingInviteOnNewInvite
+	}
+}
+
+func WithInvitationExpiration(invitationExpirationSeconds int) ConfigOption {
+	return func(c *config) {
+		c.invitationExpirationSeconds = invitationExpirationSeconds
+	}
+}
+
+// WithMaxMembersPerOrganization sets the maximum number of members a organization can have.
+// If set to 0, there is no limit.
+func WithMaxMembersPerOrganization(maxMembersPerOrganization int) ConfigOption {
+	return func(c *config) {
+		c.maxMembersPerOrganization = maxMembersPerOrganization
+	}
+}
+
+func WithMaxMembersPerOrganizationFunc(maxMembersPerOrganizationFunc MaxMembersPerOrganizationFunc) ConfigOption {
+	return func(c *config) {
+		c.maxMembersPerOrganization = maxMembersPerOrganizationFunc
 	}
 }

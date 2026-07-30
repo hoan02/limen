@@ -12,7 +12,7 @@ type API interface {
 	GetOrganization(ctx context.Context, organizationID any) (*Organization, error)
 	ListOrganizations(ctx context.Context, user *limen.User, filter *ListOrganizationsFilter, opts *limen.QueryOptions) (*limen.Page[*Organization], error)
 
-	CreateMember(ctx context.Context, user *limen.User, organization *Organization, role string) (*Member, error)
+	CreateMember(ctx context.Context, user *limen.User, organization *Organization, role any) (*Member, error)
 	GetMember(ctx context.Context, organizationID, userID any) (*Member, error)
 	GetMemberWithRelations(ctx context.Context, user *limen.User, organizationID any) (*Member, error)
 	ListMembers(ctx context.Context, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error)
