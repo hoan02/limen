@@ -14,7 +14,11 @@ func (a *Adapter) Create(ctx context.Context, tableName limen.SchemaTableName, d
 	if len(data) == 0 {
 		return limen.DatabaseResult{}, fmt.Errorf("create: no data")
 	}
-	cols := sortedKeys(data)
+	payload, err := normalizeWriteMap(data)
+	if err != nil {
+		return limen.DatabaseResult{}, err
+	}
+	cols := sortedKeys(payload)
 	quotedCols := make([]string, len(cols))
 	for i, c := range cols {
 		quotedCols[i] = a.quoteIdent(c)
@@ -28,7 +32,7 @@ func (a *Adapter) Create(ctx context.Context, tableName limen.SchemaTableName, d
 		a.quoteIdent(string(tableName)),
 		strings.Join(quotedCols, ", "),
 		strings.Join(namedPlaceholders, ", "))
-	result, err := a.getNamed().NamedExecContext(ctx, query, data)
+	result, err := a.getNamed().NamedExecContext(ctx, query, payload)
 	if err != nil {
 		return limen.DatabaseResult{}, err
 	}
@@ -140,7 +144,11 @@ func (a *Adapter) buildUpdateAssignment(column string, value any) (string, any, 
 	quotedColumn := a.quoteIdent(column)
 	update, ok := value.(limen.ArithmeticUpdate)
 	if !ok {
-		return quotedColumn + " = ?", value, nil
+		normalized, err := normalizeWriteValue(value)
+		if err != nil {
+			return "", nil, fmt.Errorf("update column %q: %w", column, err)
+		}
+		return quotedColumn + " = ?", normalized, nil
 	}
 	if err := update.Validate(); err != nil {
 		return "", nil, fmt.Errorf("update column %q: %w", column, err)

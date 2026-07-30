@@ -141,6 +141,48 @@ func TestUpdate(t *testing.T) {
 	assert.Equal(t, "new@test.com", result["email"])
 }
 
+func TestCreateUpdate_MarshalsMapValues(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { db.Close() })
+
+	_, err = db.Exec(`CREATE TABLE "sessions" (
+		"id" INTEGER PRIMARY KEY AUTOINCREMENT,
+		"token" TEXT NOT NULL,
+		"metadata" TEXT
+	)`)
+	require.NoError(t, err)
+
+	adapter := NewSQLite(db)
+	ctx := t.Context()
+
+	_, err = adapter.Create(ctx, "sessions", map[string]any{
+		"token": "t1",
+		"metadata": map[string]any{
+			"active_organization_id": 23,
+		},
+	})
+	require.NoError(t, err)
+
+	row, err := adapter.FindOne(ctx, "sessions", []limen.Where{limen.Eq("token", "t1")}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"active_organization_id":23}`, row["metadata"])
+
+	_, err = adapter.Update(ctx, "sessions", []limen.Where{
+		limen.Eq("token", "t1"),
+	}, map[string]any{
+		"metadata": map[string]any{"active_organization_id": 24, "ip": "::1"},
+	})
+	require.NoError(t, err)
+
+	row, err = adapter.FindOne(ctx, "sessions", []limen.Where{limen.Eq("token", "t1")}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"active_organization_id":24,"ip":"::1"}`, row["metadata"])
+}
+
 func TestUpdate_MixesArithmeticAndAssignments(t *testing.T) {
 	t.Parallel()
 
