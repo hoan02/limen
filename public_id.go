@@ -97,8 +97,8 @@ func rewritePublicIDCondition(schemaName SchemaName, config *PublicIDConfig, pub
 }
 
 func rewritePublicIDSliceCondition(schemaName SchemaName, config *PublicIDConfig, publicIDColumn string, condition Where) (Where, error) {
-	values, ok := condition.Value.([]string)
-	if !ok || len(values) == 0 || !config.Matcher(schemaName, values[0]) {
+	values, ok := publicIDStrings(condition.Value)
+	if !ok || !config.Matcher(schemaName, values[0]) {
 		return condition, nil
 	}
 
@@ -114,4 +114,29 @@ func rewritePublicIDSliceCondition(schemaName SchemaName, config *PublicIDConfig
 	condition.Column = publicIDColumn
 	condition.Value = decoded
 	return condition, nil
+}
+
+func publicIDStrings(value any) ([]string, bool) {
+	switch v := value.(type) {
+	case []string:
+		if len(v) == 0 {
+			return nil, false
+		}
+		return v, true
+	case []any:
+		if len(v) == 0 {
+			return nil, false
+		}
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
 }

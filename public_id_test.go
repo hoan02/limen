@@ -192,6 +192,30 @@ func TestPublicIDs_Runtime(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func TestPublicIDs_RewriteInAnySlice(t *testing.T) {
+	t.Parallel()
+
+	limen, schema := newPublicIDFixture(t, usersOnlyPublicIDConfig(func(context.Context, SchemaName) (string, error) {
+		return "raw-1", nil
+	}))
+	ctx := t.Context()
+
+	require.NoError(t, limen.core.Create(ctx, schema, &User{Email: "a@test.com"}, nil))
+	require.NoError(t, limen.core.Create(ctx, schema, &User{Email: "b@test.com"}, map[string]any{
+		schema.GetField(SchemaPublicIDField): "provided",
+	}))
+
+	// In() stores []any; rewrite must decode public IDs instead of querying the PK column.
+	users, err := limen.core.FindMany(ctx, schema, []Where{
+		In(schema.GetIDField(), []any{"usr_raw-1", "usr_provided"}),
+	})
+	require.NoError(t, err)
+	require.Len(t, users, 2)
+
+	emails := []string{users[0].(*User).Email, users[1].(*User).Email}
+	assert.ElementsMatch(t, []string{"a@test.com", "b@test.com"}, emails)
+}
+
 func TestPublicIDs_DisableResponseTransform(t *testing.T) {
 	t.Parallel()
 
