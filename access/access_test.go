@@ -187,3 +187,73 @@ func TestClampPermissions(t *testing.T) {
 		})
 	}
 }
+
+func TestP(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parses specs", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name  string
+			specs []string
+			want  Permissions
+		}{
+			{
+				name:  "single action",
+				specs: []string{"invitation:cancel"},
+				want:  Permissions{"invitation": {"cancel"}},
+			},
+			{
+				name:  "comma-separated actions",
+				specs: []string{"invitation:create,read"},
+				want:  Permissions{"invitation": {"create", "read"}},
+			},
+			{
+				name:  "multiple resources",
+				specs: []string{"organization:read", "member:read"},
+				want:  Permissions{"organization": {"read"}, "member": {"read"}},
+			},
+			{
+				name:  "trims whitespace",
+				specs: []string{" invitation : create , read "},
+				want:  Permissions{"invitation": {"create", "read"}},
+			},
+			{
+				name:  "merges duplicate resources",
+				specs: []string{"invitation:create", "invitation:read"},
+				want:  Permissions{"invitation": {"create", "read"}},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				assert.Equal(t, tt.want, P(tt.specs...))
+			})
+		}
+	})
+
+	t.Run("panics on invalid specs", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name  string
+			specs []string
+		}{
+			{"no specs", nil},
+			{"empty spec", []string{""}},
+			{"missing colon", []string{"invitation"}},
+			{"missing resource", []string{":read"}},
+			{"missing actions", []string{"invitation:"}},
+			{"empty action", []string{"invitation:create,"}},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				assert.Panics(t, func() { P(tt.specs...) })
+			})
+		}
+	})
+}

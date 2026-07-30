@@ -4,7 +4,9 @@
 package access
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 )
 
 // Wildcard grants every action on a resource when used in Permissions.
@@ -15,6 +17,50 @@ type Statements map[string][]string
 
 // Permissions is a set of grants: resource → granted actions.
 type Permissions map[string][]string
+
+// P parses "resource:action,action" specs into Permissions.
+// Panics on invalid input; intended for static declarations (routes, roles).
+//
+//	access.P("invitation:cancel")
+//	access.P("organization:read", "member:read")
+//	access.P("invitation:create,read")
+func P(specs ...string) Permissions {
+	perms, err := parsePermissionSpecs(specs...)
+	if err != nil {
+		panic(err)
+	}
+	return MergePermissions(perms)
+}
+
+func parsePermissionSpecs(specs ...string) (Permissions, error) {
+	if len(specs) == 0 {
+		return nil, fmt.Errorf("access: at least one permission spec is required")
+	}
+
+	out := make(Permissions)
+	for _, spec := range specs {
+		spec = strings.TrimSpace(spec)
+		if spec == "" {
+			return nil, fmt.Errorf("access: empty permission spec")
+		}
+
+		resource, actionsPart, ok := strings.Cut(spec, ":")
+		resource = strings.TrimSpace(resource)
+		actionsPart = strings.TrimSpace(actionsPart)
+		if !ok || resource == "" || actionsPart == "" {
+			return nil, fmt.Errorf("access: invalid permission spec %q", spec)
+		}
+
+		for action := range strings.SplitSeq(actionsPart, ",") {
+			action = strings.TrimSpace(action)
+			if action == "" {
+				return nil, fmt.Errorf("access: invalid permission spec %q: empty action", spec)
+			}
+			out[resource] = append(out[resource], action)
+		}
+	}
+	return out, nil
+}
 
 // AccessControl holds a permission vocabulary that grants are validated
 // against. It is immutable after New and safe for concurrent use.
