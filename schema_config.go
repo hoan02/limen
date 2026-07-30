@@ -74,6 +74,27 @@ func (c *SchemaConfig) GetIDColumnType() ColumnType {
 	return ColumnTypeInt64
 }
 
+// MatchesIDColumnType checks if the value matches the ID column type
+func (c *SchemaConfig) MatchesIDColumnType(value any) bool {
+	idType := c.GetIDColumnType()
+	switch idType {
+	case ColumnTypeString, ColumnTypeText, ColumnTypeUUID:
+		_, ok := value.(string)
+		return ok
+	case ColumnTypeInt, ColumnTypeInt32, ColumnTypeInt64:
+		switch value.(type) {
+		case int, int8, int16, int32, int64:
+			return true
+		case float64: // JSON numbers decode as float64 into `any`
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
 func (c *SchemaConfig) getPublicIDConfig(schemaName SchemaName) (*PublicIDConfig, bool) {
 	if c.publicID == nil || c.publicID.Disabled {
 		return nil, false

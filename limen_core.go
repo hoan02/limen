@@ -52,6 +52,22 @@ func (c *LimenCore) EncodePublicID(schema Schema, model Model) (string, bool) {
 	return config.Encoder(schemaName, value), true
 }
 
+func (c *LimenCore) IsPublicID(schema Schema, value string) bool {
+	schemaName, config, ok := c.getPublicIDConfig(schema)
+	if !ok {
+		return false
+	}
+	return config.Matcher(schemaName, value)
+}
+
+func (c *LimenCore) DecodePublicID(schema Schema, value string) (string, error) {
+	schemaName, config, ok := c.getPublicIDConfig(schema)
+	if !ok {
+		return "", fmt.Errorf("failed to get public ID config for schema %s", schema.GetSchemaName())
+	}
+	return config.Decoder(schemaName, value)
+}
+
 func (c *LimenCore) SerializeModel(schema Schema, model Model) map[string]any {
 	serialized := maps.Clone(schema.Serialize(model))
 	_, config, enabled := c.getPublicIDConfig(schema)
