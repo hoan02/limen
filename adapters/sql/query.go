@@ -61,9 +61,9 @@ func (a *Adapter) FindOne(ctx context.Context, tableName limen.SchemaTableName, 
 	if err != nil {
 		return nil, err
 	}
-	if a.db.DriverName() == "mysql" {
-		normalizeRow(dest)
-	}
+
+	normalizeRow(dest)
+
 	return dest, nil
 }
 
@@ -100,9 +100,7 @@ func (a *Adapter) FindMany(ctx context.Context, tableName limen.SchemaTableName,
 		if err := rows.MapScan(m); err != nil {
 			return nil, err
 		}
-		if a.db.DriverName() == "mysql" {
-			normalizeRow(m)
-		}
+		normalizeRow(m)
 		results = append(results, m)
 	}
 	return results, rows.Err()
