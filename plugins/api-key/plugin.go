@@ -59,7 +59,7 @@ func (p *apiKeyPlugin) PluginHTTPConfig() limen.PluginHTTPConfig {
 	return limen.PluginHTTPConfig{
 		BasePath: "/api-keys",
 		RateLimitRules: []*limen.RateLimitRule{
-			limen.NewRateLimitRuleWithMethod("/", http.MethodPost, 5, 10*time.Second),
+			limen.NewRateLimitRuleWithMethod(http.MethodPost, "/", 5, 10*time.Second),
 			limen.NewRateLimitRule("/:id/rotate", 5, 10*time.Second),
 		},
 	}
