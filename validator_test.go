@@ -193,8 +193,11 @@ func TestIn(t *testing.T) {
 		allowed []string
 		wantErr bool
 	}{
-		{"not in list", "pending", []string{"active", "inactive"}, true},
-		{"in list", "admin", []string{"admin", "user", "guest"}, false},
+		{"scalar not in list", "pending", []string{"active", "inactive"}, true},
+		{"scalar in list", "admin", []string{"admin", "user", "guest"}, false},
+		{"list all allowed", []string{"pending", "accepted"}, []string{"pending", "accepted", "rejected"}, false},
+		{"list has invalid", []string{"pending", "bogus"}, []string{"pending", "accepted"}, true},
+		{"empty list", []string{}, []string{"pending"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -205,6 +208,87 @@ func TestIn(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestArray(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		value       any
+		apply       func(*FieldValidator)
+		wantErr     bool
+		errContains string
+		want        any
+	}{
+		{
+			name:  "wraps string then String normalizes",
+			value: "pending",
+			apply: func(f *FieldValidator) { f.Array().String() },
+			want:  []string{"pending"},
+		},
+		{
+			name:  "normalizes string slice",
+			value: []string{"pending", "accepted"},
+			apply: func(f *FieldValidator) { f.Array().String() },
+			want:  []string{"pending", "accepted"},
+		},
+		{
+			name:  "normalizes any string slice",
+			value: []any{"pending", "accepted"},
+			apply: func(f *FieldValidator) { f.Array().String() },
+			want:  []string{"pending", "accepted"},
+		},
+		{
+			name:  "allows mixed elements without String",
+			value: []any{"pending", 1},
+			apply: func(f *FieldValidator) { f.Array() },
+			want:  []any{"pending", 1},
+		},
+		{
+			name:        "String rejects non-string elements",
+			value:       []any{"pending", 1},
+			apply:       func(f *FieldValidator) { f.Array().String() },
+			wantErr:     true,
+			errContains: "array of strings",
+		},
+		{
+			name:    "rejects number",
+			value:   42,
+			apply:   func(f *FieldValidator) { f.Array() },
+			wantErr: true,
+		},
+		{
+			name:    "rejects object",
+			value:   map[string]any{"a": 1},
+			apply:   func(f *FieldValidator) { f.Array() },
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			v := NewValidator()
+			v.data = map[string]any{"field": tt.value}
+			tt.apply(v.Field("field"))
+			err := v.Validate()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			if tt.want != nil {
+				assert.Equal(t, tt.want, v.data["field"])
 			}
 		})
 	}

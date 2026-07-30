@@ -193,6 +193,8 @@ func (f *FieldValidator) size() (int, bool) {
 	switch v := f.value.(type) {
 	case string:
 		return len(strings.TrimSpace(v)), true
+	case []string:
+		return len(v), true
 	case []any:
 		return len(v), true
 	case map[string]any:
@@ -205,7 +207,72 @@ func (f *FieldValidator) size() (int, bool) {
 }
 
 func (f *FieldValidator) String() *FieldValidator {
-	return f.apply(func() { f.str() })
+	return f.apply(func() {
+		switch v := f.value.(type) {
+		case []any:
+			items := make([]string, len(v))
+			for i, item := range v {
+				s, ok := item.(string)
+				if !ok {
+					f.fail("must be an array of strings")
+					f.skip = true
+					return
+				}
+				items[i] = strings.TrimSpace(s)
+			}
+			f.value = items
+			if f.setValue != nil {
+				f.setValue(items)
+			}
+		case []string:
+			items := make([]string, len(v))
+			for i, item := range v {
+				items[i] = strings.TrimSpace(item)
+			}
+			f.value = items
+			if f.setValue != nil {
+				f.setValue(items)
+			}
+		default:
+			f.str()
+		}
+	})
+}
+
+// Array ensures the value is a list and normalizes it to []any.
+// A single string is wrapped as a one-element list (query-param ergonomics).
+func (f *FieldValidator) Array() *FieldValidator {
+	return f.apply(func() {
+		items, ok := asAnySlice(f.value)
+		if !ok {
+			f.fail("must be an array")
+			f.skip = true
+			return
+		}
+		f.value = items
+		if f.setValue != nil {
+			f.setValue(items)
+		}
+	})
+}
+
+func asAnySlice(value any) ([]any, bool) {
+	switch v := value.(type) {
+	case []any:
+		items := make([]any, len(v))
+		copy(items, v)
+		return items, true
+	case []string:
+		items := make([]any, len(v))
+		for i, item := range v {
+			items[i] = item
+		}
+		return items, true
+	case string:
+		return []any{v}, true
+	default:
+		return nil, false
+	}
 }
 
 func (f *FieldValidator) MinLength(minLen int) *FieldValidator {
@@ -277,8 +344,19 @@ func (f *FieldValidator) Matches(pattern string) *FieldValidator {
 
 func (f *FieldValidator) In(allowed []string) *FieldValidator {
 	return f.apply(func() {
-		if s, ok := f.str(); ok && !slices.Contains(allowed, s) {
-			f.fail(fmt.Sprintf("must be one of: %s", strings.Join(allowed, ", ")))
+		msg := fmt.Sprintf("must be one of: %s", strings.Join(allowed, ", "))
+		switch v := f.value.(type) {
+		case []string:
+			for _, item := range v {
+				if !slices.Contains(allowed, item) {
+					f.fail(msg)
+					return
+				}
+			}
+		default:
+			if s, ok := f.str(); ok && !slices.Contains(allowed, s) {
+				f.fail(msg)
+			}
 		}
 	})
 }
