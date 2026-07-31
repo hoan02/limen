@@ -128,6 +128,12 @@ func isAbsent(value any) bool {
 	if s, ok := value.(string); ok {
 		return strings.TrimSpace(s) == ""
 	}
+	if s, ok := value.([]any); ok {
+		return len(s) == 0
+	}
+	if s, ok := value.(map[string]any); ok {
+		return len(s) == 0
+	}
 	return false
 }
 
