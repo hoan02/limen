@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/thecodearcher/limen"
-	"github.com/thecodearcher/limen/access"
 )
 
 type activeOrganizationContextKey struct{}
@@ -41,53 +40,11 @@ func (o *organizationPlugin) GetActiveOrganizationIDFromCtx(ctx context.Context)
 	return session, organizationID, nil
 }
 
-func (o *organizationPlugin) HasPermissionMiddleware(permissions access.Permissions) limen.Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := o.GetActiveOrganizationIDFromCtx(r.Context())
-			if err != nil {
-				o.responder.Error(w, r, err)
-				return
-			}
-
-			if err := o.HasPermission(r.Context(), session.User, organizationID, permissions); err != nil {
-				o.responder.Error(w, r, err)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-func (o *organizationPlugin) CanAccessOrganizationMiddleware() limen.Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := o.GetActiveOrganizationIDFromCtx(r.Context())
-			if err != nil {
-				o.responder.Error(w, r, err)
-				return
-			}
-
-			if err := o.CheckMemberExistsInOrganization(r.Context(), organizationID, session.User.ID); err != nil {
-				o.responder.Error(w, r, err)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 func (o *organizationPlugin) RequireActiveOrganizationMiddleware() limen.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			session, organizationID, err := o.GetActiveOrganizationIDFromCtx(r.Context())
 			if err != nil {
-				o.responder.Error(w, r, err)
-				return
-			}
-
-			if err := o.CheckMemberExistsInOrganization(r.Context(), organizationID, session.User.ID); err != nil {
 				o.responder.Error(w, r, err)
 				return
 			}

@@ -13,6 +13,10 @@ import (
 )
 
 func (o *organizationPlugin) CreateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, req *CreateOrganizationRoleRequest) (*OrganizationRole, error) {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("role:create")); err != nil {
+		return nil, err
+	}
+
 	req.Name = strings.TrimSpace(strings.ToLower(req.Name))
 	if err := o.checkCustomRolesEnabled(); err != nil {
 		return nil, err
@@ -54,6 +58,10 @@ func (o *organizationPlugin) CreateOrganizationRole(ctx context.Context, user *l
 }
 
 func (o *organizationPlugin) UpdateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any, req *UpdateOrganizationRoleRequest) (*OrganizationRole, error) {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("role:update")); err != nil {
+		return nil, err
+	}
+
 	role, err := o.GetOrganizationRole(ctx, organization, roleID)
 	if err != nil {
 		return nil, err
@@ -105,6 +113,10 @@ func (o *organizationPlugin) UpdateOrganizationRole(ctx context.Context, user *l
 }
 
 func (o *organizationPlugin) DeleteOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any) error {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("role:delete")); err != nil {
+		return err
+	}
+
 	role, err := o.GetOrganizationRole(ctx, organization, roleID)
 	if err != nil {
 		return err
@@ -148,8 +160,12 @@ func (o *organizationPlugin) GetOrganizationRole(ctx context.Context, organizati
 	return role.(*OrganizationRole), nil
 }
 
-func (o *organizationPlugin) ListOrganizationRoles(ctx context.Context, organization *Organization, opts *limen.QueryOptions) (*limen.Page[*OrganizationRole], error) {
+func (o *organizationPlugin) ListOrganizationRoles(ctx context.Context, user *limen.User, organization *Organization, opts *limen.QueryOptions) (*limen.Page[*OrganizationRole], error) {
 	if err := o.checkCustomRolesEnabled(); err != nil {
+		return nil, err
+	}
+
+	if err := o.HasPermission(ctx, user, organization.ID, perms("role:read")); err != nil {
 		return nil, err
 	}
 

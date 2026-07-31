@@ -21,7 +21,7 @@ type API interface {
 	GetMemberByID(ctx context.Context, organization *Organization, memberID any) (*Member, error)
 	GetMemberWithRelations(ctx context.Context, user *limen.User, organizationID any) (*Member, error)
 	ListMembers(ctx context.Context, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error)
-	ListMembersWithRelations(ctx context.Context, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error)
+	ListMembersWithRelations(ctx context.Context, user *limen.User, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error)
 	GetMemberRoles(ctx context.Context, memberID any) ([]*access.Role, error)
 	AssignMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, role any) error
 	RevokeMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, role any) error
@@ -30,7 +30,7 @@ type API interface {
 
 	CreateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, req *CreateOrganizationRoleRequest) (*OrganizationRole, error)
 	GetOrganizationRole(ctx context.Context, organization *Organization, roleID any) (*OrganizationRole, error)
-	ListOrganizationRoles(ctx context.Context, organization *Organization, opts *limen.QueryOptions) (*limen.Page[*OrganizationRole], error)
+	ListOrganizationRoles(ctx context.Context, user *limen.User, organization *Organization, opts *limen.QueryOptions) (*limen.Page[*OrganizationRole], error)
 	UpdateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any, req *UpdateOrganizationRoleRequest) (*OrganizationRole, error)
 	DeleteOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any) error
 	GetMemberPermissions(ctx context.Context, organizationID any, user *limen.User) (access.Permissions, error)
@@ -39,7 +39,7 @@ type API interface {
 	FindPendingInvitation(ctx context.Context, options *FindPendingInvitationOptions) (*Invitation, error)
 	RespondToInvitation(ctx context.Context, user *limen.User, invitationToken string, response InvitationResponse) (*Invitation, error)
 	CancelPendingInvitation(ctx context.Context, user *limen.User, organization *Organization, invitationID any) (*Invitation, error)
-	ListInvitations(ctx context.Context, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error)
+	ListInvitations(ctx context.Context, user *limen.User, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error)
 
 	// SwitchOrganization sets the active organization after verifying membership.
 	// Pass nil to clear the active organization.

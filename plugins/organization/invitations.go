@@ -28,6 +28,10 @@ type ListInvitationsOptions struct {
 }
 
 func (o *organizationPlugin) CreateInvitation(ctx context.Context, user *limen.User, organization *Organization, req *CreateInvitationRequest) (*Invitation, error) {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("invitation:create")); err != nil {
+		return nil, err
+	}
+
 	invitation, err := o.FindPendingInvitation(ctx, &FindPendingInvitationOptions{
 		Email:          req.Email,
 		OrganizationID: organization.ID,
@@ -169,6 +173,10 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 }
 
 func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, user *limen.User, organization *Organization, invitationID any) (*Invitation, error) {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("invitation:cancel")); err != nil {
+		return nil, err
+	}
+
 	invitation, err := o.FindPendingInvitation(ctx, &FindPendingInvitationOptions{
 		InvitationID: invitationID,
 	})
@@ -198,7 +206,11 @@ func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, user *
 	return invitation, nil
 }
 
-func (o *organizationPlugin) ListInvitations(ctx context.Context, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error) {
+func (o *organizationPlugin) ListInvitations(ctx context.Context, user *limen.User, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error) {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("invitation:read")); err != nil {
+		return nil, err
+	}
+
 	conditions := []limen.Where{limen.Eq(o.invitationSchema.GetOrganizationIDField(), organization.ID)}
 
 	if len(options.Statuses) > 0 {

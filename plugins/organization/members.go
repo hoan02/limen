@@ -47,6 +47,10 @@ func (o *organizationPlugin) CreateMember(ctx context.Context, user *limen.User,
 }
 
 func (o *organizationPlugin) AssignMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, roleToAssign any) error {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("member:update")); err != nil {
+		return err
+	}
+
 	member, err := o.GetMemberByID(ctx, organization, memberID)
 	if err != nil {
 		return err
@@ -83,6 +87,10 @@ func (o *organizationPlugin) AssignMemberRole(ctx context.Context, user *limen.U
 }
 
 func (o *organizationPlugin) RevokeMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, roleToRevoke any) error {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("member:update")); err != nil {
+		return err
+	}
+
 	member, err := o.GetMemberByID(ctx, organization, memberID)
 	if err != nil {
 		return err
@@ -171,6 +179,10 @@ func (o *organizationPlugin) GetMemberByID(ctx context.Context, organization *Or
 }
 
 func (o *organizationPlugin) RemoveMember(ctx context.Context, user *limen.User, organization *Organization, memberID any) error {
+	if err := o.HasPermission(ctx, user, organization.ID, perms("member:delete")); err != nil {
+		return err
+	}
+
 	member, err := o.GetMemberByID(ctx, organization, memberID)
 	if err != nil {
 		return err
@@ -250,7 +262,12 @@ func (o *organizationPlugin) GetMemberRoles(ctx context.Context, memberID any) (
 
 // Get a complete organization member with all its related entities
 func (o *organizationPlugin) GetMemberWithRelations(ctx context.Context, user *limen.User, organizationID any) (*Member, error) {
-	member, err := o.GetMemberByUserID(ctx, organizationID, user.ID)
+	organization, err := o.GetOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	member, err := o.GetMemberByUserID(ctx, organization.ID, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -260,10 +277,6 @@ func (o *organizationPlugin) GetMemberWithRelations(ctx context.Context, user *l
 		return nil, err
 	}
 
-	organization, err := o.GetOrganization(ctx, organizationID)
-	if err != nil {
-		return nil, err
-	}
 	member.Roles = roles
 	member.User = user
 	member.Organization = organization
@@ -280,7 +293,11 @@ func (o *organizationPlugin) ListMembers(ctx context.Context, organizationID any
 	return limen.MapPage[*Member](members), nil
 }
 
-func (o *organizationPlugin) ListMembersWithRelations(ctx context.Context, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error) {
+func (o *organizationPlugin) ListMembersWithRelations(ctx context.Context, user *limen.User, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error) {
+	if err := o.HasPermission(ctx, user, organizationID, perms("member:read")); err != nil {
+		return nil, err
+	}
+
 	page, err := o.ListMembers(ctx, organizationID, opts)
 	if err != nil {
 		return nil, err

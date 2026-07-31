@@ -39,57 +39,25 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 	routeBuilder.ProtectedPATCH("/:id", "organizations:update", h.UpdateOrganization)
 	routeBuilder.ProtectedDELETE("/:id", "organizations:delete", h.DeleteOrganization)
 
-	routeBuilder.ProtectedGET("/members", "organizations:members-list", h.ListMembers,
-		h.plugin.HasPermissionMiddleware(perms("organization:read", "member:read")),
-	)
-	routeBuilder.ProtectedGET("/me", "organizations:member-get", h.GetMember, h.plugin.CanAccessOrganizationMiddleware())
+	routeBuilder.ProtectedGET("/members", "organizations:members-list", h.ListMembers)
+	routeBuilder.ProtectedGET("/me", "organizations:member-get", h.GetMember)
 	routeBuilder.ProtectedPOST("/switch", "organizations:switch", h.SwitchOrganization)
 	routeBuilder.ProtectedPOST("/leave", "organizations:leave-organization", h.LeaveOrganization)
 
-	routeBuilder.ProtectedPOST("/invitations", "organizations:invite-member", h.InviteMember,
-		h.plugin.RequireActiveOrganizationMiddleware(),
-		h.plugin.HasPermissionMiddleware(perms("invitation:create")),
-	)
+	routeBuilder.ProtectedPOST("/invitations", "organizations:invite-member", h.InviteMember, h.plugin.RequireActiveOrganizationMiddleware())
 	routeBuilder.ProtectedPOST("/invitations/respond", "organizations:respond-to-invitation", h.RespondToInvitation)
+	routeBuilder.ProtectedPOST("/invitations/cancel", "organizations:cancel-pending-invitation", h.CancelPendingInvitation, h.plugin.RequireActiveOrganizationMiddleware())
+	routeBuilder.ProtectedGET("/invitations", "organizations:list-invitations", h.ListInvitations, h.plugin.RequireActiveOrganizationMiddleware())
 
-	routeBuilder.ProtectedPOST("/invitations/cancel", "organizations:cancel-pending-invitation", h.CancelPendingInvitation,
-		h.plugin.RequireActiveOrganizationMiddleware(),
-		h.plugin.HasPermissionMiddleware(perms("invitation:cancel")),
-	)
-	routeBuilder.ProtectedGET("/invitations", "organizations:list-invitations", h.ListInvitations,
-		h.plugin.RequireActiveOrganizationMiddleware(),
-		h.plugin.HasPermissionMiddleware(perms("invitation:read")),
-	)
-	routeBuilder.ProtectedPOST("/members/:id/roles/revoke", "organizations:revoke-member-role", h.RevokeMemberRoles,
-		h.plugin.RequireActiveOrganizationMiddleware(),
-		h.plugin.HasPermissionMiddleware(perms("member:update")),
-	)
-	routeBuilder.ProtectedPOST("/members/:id/roles/assign", "organizations:assign-member-role", h.AssignMemberRoles,
-		h.plugin.RequireActiveOrganizationMiddleware(),
-		h.plugin.HasPermissionMiddleware(perms("member:update")),
-	)
-	routeBuilder.ProtectedDELETE("/members/:id", "organizations:remove-member", h.RemoveMember,
-		h.plugin.RequireActiveOrganizationMiddleware(),
-		h.plugin.HasPermissionMiddleware(perms("member:delete")),
-	)
+	routeBuilder.ProtectedPOST("/members/:id/roles/revoke", "organizations:revoke-member-role", h.RevokeMemberRoles, h.plugin.RequireActiveOrganizationMiddleware())
+	routeBuilder.ProtectedPOST("/members/:id/roles/assign", "organizations:assign-member-role", h.AssignMemberRoles, h.plugin.RequireActiveOrganizationMiddleware())
+	routeBuilder.ProtectedDELETE("/members/:id", "organizations:remove-member", h.RemoveMember, h.plugin.RequireActiveOrganizationMiddleware())
 
 	if h.plugin.config.customRolesEnabled {
-		routeBuilder.ProtectedPOST("/roles", "organizations:create-role", h.CreateOrganizationRole,
-			h.plugin.RequireActiveOrganizationMiddleware(),
-			h.plugin.HasPermissionMiddleware(perms("role:create")),
-		)
-		routeBuilder.ProtectedGET("/roles", "organizations:list-roles", h.ListOrganizationRoles,
-			h.plugin.RequireActiveOrganizationMiddleware(),
-			h.plugin.HasPermissionMiddleware(perms("role:read")),
-		)
-		routeBuilder.ProtectedPATCH("/roles/:id", "organizations:update-role", h.UpdateOrganizationRole,
-			h.plugin.RequireActiveOrganizationMiddleware(),
-			h.plugin.HasPermissionMiddleware(perms("role:update")),
-		)
-		routeBuilder.ProtectedDELETE("/roles/:id", "organizations:delete-role", h.DeleteOrganizationRole,
-			h.plugin.RequireActiveOrganizationMiddleware(),
-			h.plugin.HasPermissionMiddleware(perms("role:delete")),
-		)
+		routeBuilder.ProtectedPOST("/roles", "organizations:create-role", h.CreateOrganizationRole, h.plugin.RequireActiveOrganizationMiddleware())
+		routeBuilder.ProtectedGET("/roles", "organizations:list-roles", h.ListOrganizationRoles, h.plugin.RequireActiveOrganizationMiddleware())
+		routeBuilder.ProtectedPATCH("/roles/:id", "organizations:update-role", h.UpdateOrganizationRole, h.plugin.RequireActiveOrganizationMiddleware())
+		routeBuilder.ProtectedDELETE("/roles/:id", "organizations:delete-role", h.DeleteOrganizationRole, h.plugin.RequireActiveOrganizationMiddleware())
 	}
 }
 
@@ -247,13 +215,13 @@ func (h *organizationHandlers) GetMember(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *organizationHandlers) ListMembers(w http.ResponseWriter, r *http.Request) {
-	_, organizationID, err := h.plugin.GetActiveOrganizationIDFromCtx(r.Context())
+	session, organizationID, err := h.plugin.GetActiveOrganizationIDFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
 	}
 
-	members, err := h.plugin.ListMembersWithRelations(r.Context(), organizationID, limen.ParsePagination(r))
+	members, err := h.plugin.ListMembersWithRelations(r.Context(), session.User, organizationID, limen.ParsePagination(r))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -401,7 +369,7 @@ func (h *organizationHandlers) ListInvitations(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	invitations, err := h.plugin.ListInvitations(r.Context(), session.Organization, options)
+	invitations, err := h.plugin.ListInvitations(r.Context(), session.Session.User, session.Organization, options)
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -554,7 +522,7 @@ func (h *organizationHandlers) ListOrganizationRoles(w http.ResponseWriter, r *h
 		return
 	}
 
-	roles, err := h.plugin.ListOrganizationRoles(r.Context(), session.Organization, limen.ParsePagination(r))
+	roles, err := h.plugin.ListOrganizationRoles(r.Context(), session.Session.User, session.Organization, limen.ParsePagination(r))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
