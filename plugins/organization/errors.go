@@ -18,7 +18,7 @@ var (
 	ErrOwnerRoleNotFound      = limen.NewLimenError("Could not find the configured owner role", http.StatusInternalServerError, nil)
 	ErrInsufficientPermission = limen.NewLimenError("You do not have permission to access this resource", http.StatusForbidden, nil)
 
-	ErrMemberNotInOrganization = limen.NewLimenError("You are not a member of this organization", http.StatusForbidden, nil)
+	ErrMemberNotInOrganization = limen.NewLimenError("The member is not a member of this organization", http.StatusForbidden, nil)
 	ErrFailedToResolveRoles    = limen.NewLimenError("Invalid role provided", http.StatusBadRequest, nil)
 
 	ErrUserCannotInviteOwner = limen.NewLimenError("You cannot invite the owner role. Only existing owners can invite a new owner.", http.StatusForbidden, nil)
@@ -29,4 +29,8 @@ var (
 
 	ErrUserAlreadyInOrganization        = limen.NewLimenError("This email address is already in use in this organization", http.StatusConflict, nil)
 	ErrMaxMembersPerOrganizationReached = limen.NewLimenError("The organization has reached the maximum number of members", http.StatusForbidden, nil)
+
+	ErrMemberMustHaveAtLeastOneRole = limen.NewLimenError("The member must have at least one role", http.StatusForbidden, nil)
+	ErrCannotRemoveLastOwner        = limen.NewLimenError("Organization must have at least one owner", http.StatusForbidden, nil)
+	ErrUserCannotManageOwnerRole    = limen.NewLimenError("Only organization owners can manage the owner role", http.StatusForbidden, nil)
 )

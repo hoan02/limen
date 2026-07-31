@@ -3,6 +3,7 @@ package organization
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/thecodearcher/limen"
 	"github.com/thecodearcher/limen/access"
@@ -92,6 +93,10 @@ func (p *organizationPlugin) getOwnerRole() *access.Role {
 		}
 	}
 	return nil
+}
+
+func (p *organizationPlugin) isOwnerRole(role *access.Role) bool {
+	return strings.EqualFold(role.Name(), p.config.ownerRole)
 }
 
 func (o *organizationPlugin) clientOrganizationID(org *Organization) string {

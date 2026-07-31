@@ -111,10 +111,18 @@ func (o *organizationPlugin) composeMemberRoles(memberRoles []*MemberRole, dynam
 
 func (o *organizationPlugin) resolveRoles(ctx context.Context, organization *Organization, roles []any) ([]*access.Role, error) {
 	resolvedRoles := make([]*access.Role, 0)
-
 	possiblyDynamicRoleIDs := make([]any, 0)
 
+	if len(roles) == 0 {
+		return nil, ErrFailedToResolveRoles
+	}
+
 	for _, role := range roles {
+		if r, ok := role.(*access.Role); ok {
+			resolvedRoles = append(resolvedRoles, r)
+			continue
+		}
+
 		if name, ok := role.(string); ok {
 			if i := slices.IndexFunc(o.config.roles, func(r access.Role) bool {
 				return r.Name() == name

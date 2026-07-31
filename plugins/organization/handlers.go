@@ -21,9 +21,7 @@ func (p *organizationPlugin) PluginHTTPConfig() limen.PluginHTTPConfig {
 		BasePath: "/organizations",
 		RateLimitRules: []*limen.RateLimitRule{
 			limen.NewRateLimitRuleWithMethod(http.MethodPost, "/", 5, 10*time.Second),
-			limen.NewRateLimitRule("/invitations/respond", 5, 10*time.Second),
-			limen.NewRateLimitRuleWithMethod(http.MethodPost, "/invitations", 5, 10*time.Second),
-			limen.NewRateLimitRuleWithMethod(http.MethodDelete, "/invitations/:id", 5, 10*time.Second),
+			limen.NewRateLimitRuleWithMethod(http.MethodPost, "/invitations/respond", 5, 10*time.Second),
 		},
 	}
 }
@@ -43,6 +41,7 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 	)
 	routeBuilder.ProtectedGET("/me", "organizations:member-get", h.GetMember, h.plugin.CanAccessOrganizationMiddleware())
 	routeBuilder.ProtectedPOST("/switch", "organizations:switch", h.SwitchOrganization)
+	routeBuilder.ProtectedPOST("/leave", "organizations:leave-organization", h.LeaveOrganization)
 
 	routeBuilder.ProtectedPOST("/invitations", "organizations:invite-member", h.InviteMember,
 		h.plugin.RequireActiveOrganizationMiddleware(),
@@ -50,13 +49,25 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 	)
 	routeBuilder.ProtectedPOST("/invitations/respond", "organizations:respond-to-invitation", h.RespondToInvitation)
 
-	routeBuilder.ProtectedDELETE("/invitations/:id", "organizations:cancel-pending-invitation", h.CancelPendingInvitation,
+	routeBuilder.ProtectedPOST("/invitations/cancel", "organizations:cancel-pending-invitation", h.CancelPendingInvitation,
 		h.plugin.RequireActiveOrganizationMiddleware(),
 		h.plugin.HasPermissionMiddleware(perms("invitation:cancel")),
 	)
 	routeBuilder.ProtectedGET("/invitations", "organizations:list-invitations", h.ListInvitations,
 		h.plugin.RequireActiveOrganizationMiddleware(),
 		h.plugin.HasPermissionMiddleware(perms("invitation:read")),
+	)
+	routeBuilder.ProtectedPOST("/members/:id/roles/revoke", "organizations:revoke-member-role", h.RevokeMemberRoles,
+		h.plugin.RequireActiveOrganizationMiddleware(),
+		h.plugin.HasPermissionMiddleware(perms("member:update")),
+	)
+	routeBuilder.ProtectedPOST("/members/:id/roles/assign", "organizations:assign-member-role", h.AssignMemberRoles,
+		h.plugin.RequireActiveOrganizationMiddleware(),
+		h.plugin.HasPermissionMiddleware(perms("member:update")),
+	)
+	routeBuilder.ProtectedDELETE("/members/:id", "organizations:remove-member", h.RemoveMember,
+		h.plugin.RequireActiveOrganizationMiddleware(),
+		h.plugin.HasPermissionMiddleware(perms("member:delete")),
 	)
 }
 
@@ -160,7 +171,9 @@ func (h *organizationHandlers) ListMembers(w http.ResponseWriter, r *http.Reques
 
 func (h *organizationHandlers) SwitchOrganization(w http.ResponseWriter, r *http.Request) {
 	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
-		v.Field("organization").Required().String()
+		v.Field("organization").Nullable().String().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.organizationSchema, value)
+		})
 	})
 
 	if body == nil {
@@ -173,11 +186,14 @@ func (h *organizationHandlers) SwitchOrganization(w http.ResponseWriter, r *http
 		return
 	}
 
-	organizationID := body["organization"].(string)
-
-	organization, err := h.plugin.SwitchOrganization(r.Context(), session.Session, organizationID)
+	organization, err := h.plugin.SwitchOrganization(r.Context(), session.Session, body["organization"])
 	if err != nil {
 		h.responder.Error(w, r, err)
+		return
+	}
+
+	if organization == nil {
+		h.responder.JSON(w, r, http.StatusOK, nil)
 		return
 	}
 
@@ -238,7 +254,7 @@ func (h *organizationHandlers) RespondToInvitation(w http.ResponseWriter, r *htt
 
 func (h *organizationHandlers) CancelPendingInvitation(w http.ResponseWriter, r *http.Request) {
 	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
-		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+		v.Field("invitation").Required().String().Custom(func(value any, _ map[string]any) error {
 			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.invitationSchema, value)
 		})
 	})
@@ -253,7 +269,7 @@ func (h *organizationHandlers) CancelPendingInvitation(w http.ResponseWriter, r 
 		return
 	}
 
-	invitation, err := h.plugin.CancelPendingInvitation(r.Context(), session.Organization, limen.GetParam(r, "id"))
+	invitation, err := h.plugin.CancelPendingInvitation(r.Context(), session.Session.User, session.Organization, body["invitation"].(string))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -299,4 +315,110 @@ func (h *organizationHandlers) ListInvitations(w http.ResponseWriter, r *http.Re
 		PerPage:    invitations.PerPage,
 		TotalPages: invitations.TotalPages,
 	})
+}
+
+func (h *organizationHandlers) AssignMemberRoles(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.memberSchema, value)
+		})
+		v.Field("roles").Required().Array().String().Length(1)
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := GetActiveOrganizationSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	err = h.plugin.AssignMemberRole(r.Context(), session.Session.User, session.Organization, limen.GetParam(r, "id"), body["roles"].([]string)[0])
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusNoContent, nil)
+}
+
+func (h *organizationHandlers) RevokeMemberRoles(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.memberSchema, value)
+		})
+		v.Field("roles").Required().Array().String().Length(1)
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := GetActiveOrganizationSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	role := body["roles"].([]string)[0]
+	err = h.plugin.RevokeMemberRole(r.Context(), session.Session.User, session.Organization, limen.GetParam(r, "id"), role)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusNoContent, nil)
+}
+
+func (h *organizationHandlers) RemoveMember(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.memberSchema, value)
+		})
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := GetActiveOrganizationSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	err = h.plugin.RemoveMember(r.Context(), session.Session.User, session.Organization, limen.GetParam(r, "id"))
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusNoContent, nil)
+}
+
+func (h *organizationHandlers) LeaveOrganization(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Field("organization").Required().String().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.organizationSchema, value)
+		})
+	})
+
+	if body == nil {
+		return
+	}
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	err = h.plugin.LeaveOrganization(r.Context(), session.User, body["organization"].(string))
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusNoContent, nil)
 }

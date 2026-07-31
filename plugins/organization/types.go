@@ -47,8 +47,20 @@ type Hooks struct {
 	BeforeCreateInvitation func(ctx context.Context, user *limen.User, organization *Organization, request *CreateInvitationRequest) error
 	AfterCreateInvitation  func(ctx context.Context, invitation *Invitation, user *limen.User, organization *Organization)
 
+	BeforeCancelInvitation func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation) error
+	AfterCancelInvitation  func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation)
+
 	BeforeRespondToInvitation func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation, response InvitationResponse) error
 	AfterRespondToInvitation  func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation, response InvitationResponse)
+
+	BeforeAssignMemberRole func(ctx context.Context, user *limen.User, organization *Organization, member *Member, role *access.Role) error
+	AfterAssignMemberRole  func(ctx context.Context, user *limen.User, organization *Organization, member *Member, role *access.Role)
+
+	BeforeRevokeMemberRole func(ctx context.Context, user *limen.User, organization *Organization, member *Member, role *access.Role) error
+	AfterRevokeMemberRole  func(ctx context.Context, user *limen.User, organization *Organization, member *Member, role *access.Role)
+
+	BeforeRemoveMember func(ctx context.Context, user *limen.User, organization *Organization, member *Member) error
+	AfterRemoveMember  func(ctx context.Context, user *limen.User, organization *Organization, member *Member) error
 }
 
 type ConfigOption func(*config)

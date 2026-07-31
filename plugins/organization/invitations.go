@@ -168,7 +168,7 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 	return invitation, nil
 }
 
-func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, organization *Organization, invitationID any) (*Invitation, error) {
+func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, user *limen.User, organization *Organization, invitationID any) (*Invitation, error) {
 	invitation, err := o.FindPendingInvitation(ctx, &FindPendingInvitationOptions{
 		InvitationID: invitationID,
 	})
@@ -180,7 +180,22 @@ func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, organi
 		return nil, ErrInvalidInvitation
 	}
 
-	return o.cancelPendingInvitation(ctx, invitation)
+	if o.config.hooks.BeforeCancelInvitation != nil {
+		if err := o.config.hooks.BeforeCancelInvitation(ctx, user, organization, invitation); err != nil {
+			return nil, err
+		}
+	}
+
+	invitation, err = o.cancelPendingInvitation(ctx, invitation)
+	if err != nil {
+		return nil, err
+	}
+
+	if o.config.hooks.AfterCancelInvitation != nil {
+		o.config.hooks.AfterCancelInvitation(ctx, user, organization, invitation)
+	}
+
+	return invitation, nil
 }
 
 func (o *organizationPlugin) ListInvitations(ctx context.Context, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error) {
@@ -288,16 +303,14 @@ func (o *organizationPlugin) validateAndResolveInvitationRole(ctx context.Contex
 		result = resolvedRole.Name()
 	}
 
-	if strings.EqualFold(resolvedRole.Name(), o.getOwnerRole().Name()) {
-		if !o.userCanInviteOwner(ctx, user, organization) {
-			return nil, ErrUserCannotInviteOwner
-		}
+	if o.isOwnerRole(resolvedRole) && !o.userCanAssignOwnerRole(ctx, user, organization) {
+		return nil, ErrUserCannotInviteOwner
 	}
 	return result, nil
 }
 
-func (o *organizationPlugin) userCanInviteOwner(ctx context.Context, user *limen.User, organization *Organization) bool {
-	member, err := o.GetMember(ctx, organization.ID, user.ID)
+func (o *organizationPlugin) userCanAssignOwnerRole(ctx context.Context, user *limen.User, organization *Organization) bool {
+	member, err := o.GetMemberByUserID(ctx, organization.ID, user.ID)
 	if err != nil {
 		return false
 	}
@@ -378,7 +391,7 @@ func (o *organizationPlugin) checkUserWithEmailAlreadyInOrganization(ctx context
 }
 
 func (o *organizationPlugin) checkOrganizationMemberLimit(ctx context.Context, organization *Organization) error {
-	if o.config.maxMembersPerOrganization == 0 {
+	if o.config.maxMembersPerOrganization == 0 || o.config.maxMembersPerOrganization == nil {
 		return nil
 	}
 

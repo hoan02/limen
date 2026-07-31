@@ -55,7 +55,7 @@ func memberSerializer(schema *limen.SchemaConfig, plugin *organizationPlugin) li
 		payload := maps.Clone(member.raw)
 
 		if member.Roles != nil {
-			serializedRoles := memberRolesSerializer(member)
+			serializedRoles := SerializeMemberRoles(member)
 			payload["roles"] = serializedRoles["roles"]
 			payload["permissions"] = serializedRoles["permissions"]
 		}
@@ -74,21 +74,23 @@ func memberSerializer(schema *limen.SchemaConfig, plugin *organizationPlugin) li
 	})
 }
 
-func memberRolesSerializer(member *Member) map[string]any {
-	roles := member.Roles
-	roleNames := make([]string, len(roles))
-	permissions := make([]string, 0)
-
-	for i, role := range roles {
+func SerializeMemberRoles(member *Member) map[string]any {
+	roleNames := make([]string, len(member.Roles))
+	perms := make([]access.Permissions, 0, len(member.Roles))
+	for i, role := range member.Roles {
 		roleNames[i] = role.Name()
-		for resource, actions := range role.Permissions() {
-			for _, action := range actions {
-				permissions = append(permissions, fmt.Sprintf("%s:%s", resource, action))
-			}
-		}
+		perms = append(perms, role.Permissions())
 	}
 
+	merged := access.MergePermissions(perms...)
+	permissions := make([]string, 0)
+	for resource, actions := range merged {
+		for _, action := range actions {
+			permissions = append(permissions, fmt.Sprintf("%s:%s", resource, action))
+		}
+	}
 	slices.Sort(permissions)
+	slices.Sort(roleNames)
 	return map[string]any{
 		"roles":       roleNames,
 		"permissions": permissions,

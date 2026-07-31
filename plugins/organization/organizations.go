@@ -81,8 +81,9 @@ func (o *organizationPlugin) createOrganizationOwner(ctx context.Context, user *
 
 	ownerRoleName := ownerRole.Name()
 	if err := o.core.Create(ctx, o.memberRoleSchema, &MemberRole{
-		MemberID: memberModel.(*Member).ID,
-		Role:     &ownerRoleName,
+		OrganizationID: organization.ID,
+		MemberID:       memberModel.(*Member).ID,
+		Role:           &ownerRoleName,
 	}, nil); err != nil {
 		return nil, err
 	}
