@@ -356,12 +356,16 @@ func (o *organizationPlugin) attachMemberUsers(ctx context.Context, members []*M
 }
 
 func (o *organizationPlugin) assignMemberRole(ctx context.Context, member *Member, role *access.Role) error {
-	existing, err := o.core.Exists(ctx, o.memberRoleSchema, []limen.Where{
+	conditions := []limen.Where{
 		limen.Eq(o.memberRoleSchema.GetMemberIDField(), member.ID),
 		limen.Eq(o.memberRoleSchema.GetRoleField(), role.Name()),
-		limen.Eq(o.memberRoleSchema.GetOrganizationRoleIDField(), role.ID()).Or(),
-	})
+	}
 
+	if o.config.customRolesEnabled && role.ID() != nil {
+		conditions = append(conditions, limen.Eq(o.memberRoleSchema.GetOrganizationRoleIDField(), role.ID()).Or())
+	}
+
+	existing, err := o.core.Exists(ctx, o.memberRoleSchema, conditions)
 	if err != nil {
 		return err
 	}

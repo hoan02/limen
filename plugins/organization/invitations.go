@@ -395,19 +395,23 @@ func (o *organizationPlugin) checkOrganizationMemberLimit(ctx context.Context, o
 		return nil
 	}
 
-	count, err := o.core.Count(ctx, o.memberSchema, []limen.Where{
-		limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
-	})
-	if err != nil {
-		return err
-	}
-
 	maxMembersPerOrganization := 0
 	switch v := o.config.maxMembersPerOrganization.(type) {
 	case int:
 		maxMembersPerOrganization = v
 	case MaxMembersPerOrganizationFunc:
 		maxMembersPerOrganization = v(ctx, organization)
+	}
+
+	if maxMembersPerOrganization <= 0 {
+		return nil
+	}
+
+	count, err := o.core.Count(ctx, o.memberSchema, []limen.Where{
+		limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
+	})
+	if err != nil {
+		return err
 	}
 
 	if count >= int64(maxMembersPerOrganization) {

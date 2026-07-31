@@ -14,6 +14,7 @@ var defaultStatements = access.Statements{
 	"organization": {"create", "read", "update", "delete"},
 	"member":       {"read", "update", "delete"},
 	"invitation":   {"create", "read", "cancel"},
+	"role":         {"create", "read", "update", "delete"},
 }
 
 // DefaultStatements returns a copy of the plugin's built-in vocabulary.
@@ -27,6 +28,7 @@ func DefaultOwnerRole(ac *access.AccessControl, extra ...access.Permissions) (ac
 		"organization": {"*"},
 		"member":       {"*"},
 		"invitation":   {"*"},
+		"role":         {"*"},
 	}}, extra...)...))
 }
 
@@ -36,6 +38,7 @@ func DefaultAdminRole(ac *access.AccessControl, extra ...access.Permissions) (ac
 		"organization": {"read", "update"},
 		"member":       {"*"},
 		"invitation":   {"*"},
+		"role":         {"read"},
 	}}, extra...)...))
 }
 

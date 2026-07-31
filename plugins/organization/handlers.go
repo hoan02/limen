@@ -69,6 +69,25 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 		h.plugin.RequireActiveOrganizationMiddleware(),
 		h.plugin.HasPermissionMiddleware(perms("member:delete")),
 	)
+
+	if h.plugin.config.customRolesEnabled {
+		routeBuilder.ProtectedPOST("/roles", "organizations:create-role", h.CreateOrganizationRole,
+			h.plugin.RequireActiveOrganizationMiddleware(),
+			h.plugin.HasPermissionMiddleware(perms("role:create")),
+		)
+		routeBuilder.ProtectedGET("/roles", "organizations:list-roles", h.ListOrganizationRoles,
+			h.plugin.RequireActiveOrganizationMiddleware(),
+			h.plugin.HasPermissionMiddleware(perms("role:read")),
+		)
+		routeBuilder.ProtectedPATCH("/roles/:id", "organizations:update-role", h.UpdateOrganizationRole,
+			h.plugin.RequireActiveOrganizationMiddleware(),
+			h.plugin.HasPermissionMiddleware(perms("role:update")),
+		)
+		routeBuilder.ProtectedDELETE("/roles/:id", "organizations:delete-role", h.DeleteOrganizationRole,
+			h.plugin.RequireActiveOrganizationMiddleware(),
+			h.plugin.HasPermissionMiddleware(perms("role:delete")),
+		)
+	}
 }
 
 func (h *organizationHandlers) CreateOrganization(w http.ResponseWriter, r *http.Request) {
@@ -416,6 +435,107 @@ func (h *organizationHandlers) LeaveOrganization(w http.ResponseWriter, r *http.
 
 	err = h.plugin.LeaveOrganization(r.Context(), session.User, body["organization"].(string))
 	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusNoContent, nil)
+}
+
+func (h *organizationHandlers) CreateOrganizationRole(w http.ResponseWriter, r *http.Request) {
+	body := limen.BindAndValidate[CreateOrganizationRoleRequest](w, r, h.responder, func(v *limen.Validator) {
+		v.Field("name").Required().String().MaxLength(64)
+		v.Field("description").Optional().String().MaxLength(255)
+		v.Field("permissions").Required().Object()
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := GetActiveOrganizationSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	role, err := h.plugin.CreateOrganizationRole(r.Context(), session.Session.User, session.Organization, body)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusCreated, h.plugin.core.SerializeModel(h.plugin.organizationRoleSchema, role))
+}
+
+func (h *organizationHandlers) ListOrganizationRoles(w http.ResponseWriter, r *http.Request) {
+	session, err := GetActiveOrganizationSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	roles, err := h.plugin.ListOrganizationRoles(r.Context(), session.Organization, limen.ParsePagination(r))
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, &limen.Page[map[string]any]{
+		Items:      limen.SerializeModels(h.plugin.core, h.plugin.organizationRoleSchema, roles.Items),
+		Total:      roles.Total,
+		Page:       roles.Page,
+		PerPage:    roles.PerPage,
+		TotalPages: roles.TotalPages,
+	})
+}
+
+func (h *organizationHandlers) UpdateOrganizationRole(w http.ResponseWriter, r *http.Request) {
+	body := limen.BindAndValidate[UpdateOrganizationRoleRequest](w, r, h.responder, func(v *limen.Validator) {
+		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.organizationRoleSchema, value)
+		})
+		v.Field("description").Optional().String().MaxLength(255)
+		v.Field("permissions").Optional().Object()
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := GetActiveOrganizationSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	role, err := h.plugin.UpdateOrganizationRole(r.Context(), session.Session.User, session.Organization, limen.GetParam(r, "id"), body)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.organizationRoleSchema, role))
+}
+
+func (h *organizationHandlers) DeleteOrganizationRole(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.organizationRoleSchema, value)
+		})
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := GetActiveOrganizationSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	if err := h.plugin.DeleteOrganizationRole(r.Context(), session.Session.User, session.Organization, limen.GetParam(r, "id")); err != nil {
 		h.responder.Error(w, r, err)
 		return
 	}

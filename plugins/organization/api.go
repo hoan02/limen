@@ -25,6 +25,13 @@ type API interface {
 	RemoveMember(ctx context.Context, user *limen.User, organization *Organization, memberID any) error
 	CheckMemberExistsInOrganization(ctx context.Context, organizationID, userID any) error
 
+	CreateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, req *CreateOrganizationRoleRequest) (*OrganizationRole, error)
+	GetOrganizationRole(ctx context.Context, organization *Organization, roleID any) (*OrganizationRole, error)
+	ListOrganizationRoles(ctx context.Context, organization *Organization, opts *limen.QueryOptions) (*limen.Page[*OrganizationRole], error)
+	UpdateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any, req *UpdateOrganizationRoleRequest) (*OrganizationRole, error)
+	DeleteOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any) error
+	GetMemberPermissions(ctx context.Context, organizationID any, user *limen.User) (access.Permissions, error)
+
 	CreateInvitation(ctx context.Context, user *limen.User, organization *Organization, req *CreateInvitationRequest) (*Invitation, error)
 	FindPendingInvitation(ctx context.Context, options *FindPendingInvitationOptions) (*Invitation, error)
 	RespondToInvitation(ctx context.Context, user *limen.User, invitationToken string, response InvitationResponse) (*Invitation, error)

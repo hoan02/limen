@@ -1,6 +1,7 @@
 package organization
 
 import (
+	"slices"
 	"time"
 
 	"github.com/thecodearcher/limen"
@@ -33,10 +34,11 @@ const (
 
 type memberRoleSchema struct {
 	limen.BaseSchema
+	customRolesEnabled bool
 }
 
-func newMemberRoleSchema() *memberRoleSchema {
-	return &memberRoleSchema{BaseSchema: limen.BaseSchema{}}
+func newMemberRoleSchema(customRolesEnabled bool) *memberRoleSchema {
+	return &memberRoleSchema{customRolesEnabled: customRolesEnabled}
 }
 
 func (s *memberRoleSchema) GetOrganizationIDField() string {
@@ -60,55 +62,45 @@ func (s *memberRoleSchema) GetOrganizationRoleIDField() string {
 
 func (s *memberRoleSchema) ToStorage(data limen.Model) map[string]any {
 	memberRole := data.(*MemberRole)
-	return map[string]any{
-		s.GetOrganizationIDField():     memberRole.OrganizationID,
-		s.GetMemberIDField():           memberRole.MemberID,
-		s.GetRoleField():               memberRole.Role,
-		s.GetOrganizationRoleIDField(): memberRole.OrganizationRoleID,
+	payload := map[string]any{
+		s.GetOrganizationIDField(): memberRole.OrganizationID,
+		s.GetMemberIDField():       memberRole.MemberID,
+		s.GetRoleField():           memberRole.Role,
 	}
+
+	if s.customRolesEnabled {
+		payload[s.GetOrganizationRoleIDField()] = memberRole.OrganizationRoleID
+	}
+	return payload
 }
 
 func (s *memberRoleSchema) FromStorage(data map[string]any) limen.Model {
-	return &MemberRole{
-		ID:                 data[s.GetIDField()],
-		OrganizationID:     limen.GetValue[any](data[s.GetOrganizationIDField()]),
-		MemberID:           limen.GetValue[any](data[s.GetMemberIDField()]),
-		Role:               limen.GetNullableValue[string](data[s.GetRoleField()]),
-		OrganizationRoleID: limen.GetValue[any](data[s.GetOrganizationRoleIDField()]),
-		CreatedAt:          limen.GetValue[time.Time](data[s.GetCreatedAtField()]),
-		raw:                data,
+	memberRole := &MemberRole{
+		ID:             data[s.GetIDField()],
+		OrganizationID: limen.GetValue[any](data[s.GetOrganizationIDField()]),
+		MemberID:       limen.GetValue[any](data[s.GetMemberIDField()]),
+		Role:           limen.GetNullableValue[string](data[s.GetRoleField()]),
+		CreatedAt:      limen.GetValue[time.Time](data[s.GetCreatedAtField()]),
+		raw:            data,
 	}
+
+	if s.customRolesEnabled {
+		memberRole.OrganizationRoleID = limen.GetValue[any](data[s.GetOrganizationRoleIDField()])
+	}
+	return memberRole
 }
 
-func buildMemberRoleTableDef(schemaConfig *limen.SchemaConfig, schema *memberRoleSchema) *limen.SchemaDefinition {
-	return limen.NewSchemaDefinitionForTable(
-		limen.SchemaName(MemberRoleSchemaTableName),
-		MemberRoleSchemaTableName,
-		schema,
+func buildMemberRoleTableDef(schemaConfig *limen.SchemaConfig, schema *memberRoleSchema, customRolesEnabled bool) *limen.SchemaDefinition {
+	opts := []limen.SchemaDefinitionOption{
 		limen.WithSchemaIDField(schemaConfig),
 		limen.WithSchemaField(MemberRoleSchemaMemberIDField, schemaConfig.GetIDColumnType()),
 		limen.WithSchemaField(MemberRoleSchemaOrganizationIDField, schemaConfig.GetIDColumnType()),
-		limen.WithSchemaField(MemberRoleSchemaOrganizationRoleIDField, schemaConfig.GetIDColumnType(), limen.WithNullable(true)),
 		limen.WithSchemaField(MemberRoleSchemaRoleField, limen.ColumnTypeString, limen.WithNullable(true)),
 		limen.WithSchemaCreatedAtField(),
 
 		limen.WithSchemaUniqueIndex("idx_organization_member_roles_member_role", []limen.SchemaField{
 			MemberRoleSchemaMemberIDField,
 			MemberRoleSchemaRoleField,
-		}),
-
-		limen.WithSchemaUniqueIndex("idx_organization_member_roles_member_dynamic_role", []limen.SchemaField{
-			MemberRoleSchemaMemberIDField,
-			MemberRoleSchemaOrganizationRoleIDField,
-		}),
-
-		limen.WithSchemaForeignKey(limen.ForeignKeyDefinition{
-			Name:             "fk_organization_member_roles_organization_role",
-			Column:           MemberRoleSchemaOrganizationRoleIDField,
-			ReferencedSchema: limen.SchemaName(OrganizationRoleSchemaTableName),
-			ReferencedField:  limen.SchemaIDField,
-			OnDelete:         limen.FKActionCascade,
-			OnUpdate:         limen.FKActionCascade,
 		}),
 
 		limen.WithSchemaForeignKey(limen.ForeignKeyDefinition{
@@ -129,5 +121,32 @@ func buildMemberRoleTableDef(schemaConfig *limen.SchemaConfig, schema *memberRol
 			OnUpdate:         limen.FKActionCascade,
 		}),
 		limen.WithDisablePublicID(),
+	}
+
+	if customRolesEnabled {
+		opts = slices.Insert(opts, 3,
+			limen.WithSchemaField(MemberRoleSchemaOrganizationRoleIDField, schemaConfig.GetIDColumnType(), limen.WithNullable(true)),
+		)
+		opts = append(opts,
+			limen.WithSchemaUniqueIndex("idx_organization_member_roles_member_dynamic_role", []limen.SchemaField{
+				MemberRoleSchemaMemberIDField,
+				MemberRoleSchemaOrganizationRoleIDField,
+			}),
+			limen.WithSchemaForeignKey(limen.ForeignKeyDefinition{
+				Name:             "fk_organization_member_roles_organization_role",
+				Column:           MemberRoleSchemaOrganizationRoleIDField,
+				ReferencedSchema: limen.SchemaName(OrganizationRoleSchemaTableName),
+				ReferencedField:  limen.SchemaIDField,
+				OnDelete:         limen.FKActionCascade,
+				OnUpdate:         limen.FKActionCascade,
+			}),
+		)
+	}
+
+	return limen.NewSchemaDefinitionForTable(
+		limen.SchemaName(MemberRoleSchemaTableName),
+		MemberRoleSchemaTableName,
+		schema,
+		opts...,
 	)
 }

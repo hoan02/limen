@@ -2,6 +2,7 @@ package organization
 
 import (
 	"encoding/json"
+	"maps"
 	"time"
 
 	"github.com/thecodearcher/limen"
@@ -38,7 +39,26 @@ type organizationRoleSchema struct {
 }
 
 func newOrganizationRoleSchema() *organizationRoleSchema {
-	return &organizationRoleSchema{BaseSchema: limen.BaseSchema{}}
+	return &organizationRoleSchema{BaseSchema: limen.BaseSchema{Serializer: organizationRoleSerializer()}}
+}
+
+func organizationRoleSerializer() limen.ModelTransformer {
+	return limen.ModelTransformer(func(data limen.Model) map[string]any {
+		role := data.(*OrganizationRole)
+		payload := maps.Clone(role.raw)
+		if payload == nil {
+			payload = make(map[string]any)
+		}
+
+		permissions := role.Permissions
+		if permissions == nil {
+			permissions = make(map[string][]string)
+		}
+		payload["permissions"] = permissions
+
+		delete(payload, "organization_id")
+		return payload
+	})
 }
 
 func (s *organizationRoleSchema) GetOrganizationIDField() string {

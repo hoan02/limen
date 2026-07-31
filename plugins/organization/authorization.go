@@ -58,59 +58,65 @@ func (o *organizationPlugin) SetActiveOrganization(ctx context.Context, session 
 }
 
 func (o *organizationPlugin) HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error {
+	userPermissions, err := o.GetMemberPermissions(ctx, organizationID, user)
+	if err != nil {
+		return err
+	}
+
+	if !access.HasRequiredPermissions(userPermissions, permissions) {
+		return ErrInsufficientPermission
+	}
+	return nil
+}
+
+// GetMemberPermissions returns the union of every permission the user holds in the organization,
+// across both configured roles and organization-defined roles.
+func (o *organizationPlugin) GetMemberPermissions(ctx context.Context, organizationID any, user *limen.User) (access.Permissions, error) {
 	member, err := o.GetMemberByUserID(ctx, organizationID, user.ID)
 	if err != nil {
 		if errors.Is(err, limen.ErrRecordNotFound) {
-			return ErrMemberNotInOrganization
+			return nil, ErrMemberNotInOrganization
 		}
-		return err
+		return nil, err
 	}
 
 	roles, err := o.core.FindMany(ctx, o.memberRoleSchema, []limen.Where{
 		limen.Eq(o.memberRoleSchema.GetMemberIDField(), member.ID),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	memberRoles := limen.MapToSliceOfType[*MemberRole](roles)
 
 	userPermissions := make(access.Permissions)
-	dynamicRoleIDs := make([]*MemberRole, 0)
+	dynamicMemberRoles := make([]*MemberRole, 0)
 	for _, memberRole := range memberRoles {
 		if memberRole.OrganizationRoleID != nil {
-			dynamicRoleIDs = append(dynamicRoleIDs, memberRole)
+			dynamicMemberRoles = append(dynamicMemberRoles, memberRole)
 			continue
 		}
 		role, err := o.resolveMemberStaticRole(memberRole)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		userPermissions = access.MergePermissions(userPermissions, role.Permissions())
 	}
 
-	if access.HasRequiredPermissions(userPermissions, permissions) {
-		return nil
+	if len(dynamicMemberRoles) == 0 {
+		return userPermissions, nil
 	}
 
-	if len(dynamicRoleIDs) == 0 {
-		return ErrInsufficientPermission
-	}
-
-	dynamicRoles, err := o.resolveMemberDynamicRoles(ctx, dynamicRoleIDs)
+	dynamicRoles, err := o.resolveMemberDynamicRoles(ctx, dynamicMemberRoles)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, role := range dynamicRoles {
 		userPermissions = access.MergePermissions(userPermissions, role.Permissions())
 	}
 
-	if access.HasRequiredPermissions(userPermissions, permissions) {
-		return nil
-	}
-
-	return ErrInsufficientPermission
+	return userPermissions, nil
 }
 
 func (o *organizationPlugin) CheckMemberExistsInOrganization(ctx context.Context, organizationID, userID any) error {

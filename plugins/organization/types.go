@@ -26,6 +26,19 @@ type SendInvitationMailData struct {
 
 type MaxMembersPerOrganizationFunc func(ctx context.Context, organization *Organization) int
 
+type MaxRolesPerOrganizationFunc func(ctx context.Context, organization *Organization) int
+
+type CreateOrganizationRoleRequest struct {
+	Name        string              `json:"name"`
+	Description *string             `json:"description,omitempty"`
+	Permissions map[string][]string `json:"permissions"`
+}
+
+type UpdateOrganizationRoleRequest struct {
+	Description *string             `json:"description,omitempty"`
+	Permissions map[string][]string `json:"permissions,omitempty"`
+}
+
 type config struct {
 	accessControl                  *access.AccessControl
 	roles                          []access.Role
@@ -38,6 +51,8 @@ type config struct {
 	sendInvitationMail             func(ctx context.Context, data *SendInvitationMailData)
 	cancelPendingInviteOnNewInvite bool
 	invitationExpirationSeconds    int
+	customRolesEnabled             bool
+	maxRolesPerOrganization        any
 }
 
 type Hooks struct {
@@ -61,6 +76,15 @@ type Hooks struct {
 
 	BeforeRemoveMember func(ctx context.Context, user *limen.User, organization *Organization, member *Member) error
 	AfterRemoveMember  func(ctx context.Context, user *limen.User, organization *Organization, member *Member) error
+
+	BeforeCreateOrganizationRole func(ctx context.Context, user *limen.User, organization *Organization, request *CreateOrganizationRoleRequest) error
+	AfterCreateOrganizationRole  func(ctx context.Context, user *limen.User, organization *Organization, role *OrganizationRole)
+
+	BeforeUpdateOrganizationRole func(ctx context.Context, user *limen.User, organization *Organization, role *OrganizationRole, request *UpdateOrganizationRoleRequest) error
+	AfterUpdateOrganizationRole  func(ctx context.Context, user *limen.User, organization *Organization, role *OrganizationRole)
+
+	BeforeDeleteOrganizationRole func(ctx context.Context, user *limen.User, organization *Organization, role *OrganizationRole) error
+	AfterDeleteOrganizationRole  func(ctx context.Context, user *limen.User, organization *Organization, role *OrganizationRole)
 }
 
 type ConfigOption func(*config)
@@ -138,5 +162,29 @@ func WithMaxMembersPerOrganization(maxMembersPerOrganization int) ConfigOption {
 func WithMaxMembersPerOrganizationFunc(maxMembersPerOrganizationFunc MaxMembersPerOrganizationFunc) ConfigOption {
 	return func(c *config) {
 		c.maxMembersPerOrganization = maxMembersPerOrganizationFunc
+	}
+}
+
+// WithCustomRoles enables organization-defined roles. When disabled the organization_roles
+// table is not registered and the role management routes are not mounted.
+func WithCustomRoles(enabled bool) ConfigOption {
+	return func(c *config) {
+		c.customRolesEnabled = enabled
+	}
+}
+
+// WithMaxRolesPerOrganization sets the maximum number of custom roles an organization can define.
+// If set to 0, there is no limit.
+func WithMaxRolesPerOrganization(maxRolesPerOrganization int) ConfigOption {
+	return func(c *config) {
+		c.maxRolesPerOrganization = maxRolesPerOrganization
+	}
+}
+
+// WithMaxRolesPerOrganizationFunc sets the limit per organization at request time.
+// Returning 0 means no limit.
+func WithMaxRolesPerOrganizationFunc(maxRolesPerOrganizationFunc MaxRolesPerOrganizationFunc) ConfigOption {
+	return func(c *config) {
+		c.maxRolesPerOrganization = maxRolesPerOrganizationFunc
 	}
 }

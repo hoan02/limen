@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // Role is a named, immutable set of granted permissions.
@@ -17,6 +18,7 @@ type Role struct {
 // statements. A "*" action grants every action on its resource, including
 // actions declared later.
 func (ac *AccessControl) NewRole(name string, perms Permissions) (Role, error) {
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return Role{}, errors.New("access: role name must not be empty")
 	}
@@ -54,7 +56,7 @@ func (r Role) ID() any {
 
 // Name returns the role's name.
 func (r Role) Name() string {
-	return r.name
+	return strings.ToLower(r.name)
 }
 
 // Can reports whether the role grants action on resource.

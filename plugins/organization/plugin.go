@@ -34,6 +34,8 @@ func New(opts ...ConfigOption) *organizationPlugin {
 		maxMembersPerOrganization:      0,
 		invitationExpirationSeconds:    7 * 24 * 60 * 60,
 		cancelPendingInviteOnNewInvite: false,
+		customRolesEnabled:             false,
+		maxRolesPerOrganization:        0,
 	}
 
 	for _, opt := range opts {
@@ -50,17 +52,22 @@ func (p *organizationPlugin) Name() limen.PluginName {
 func (p *organizationPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.SchemaIntrospector {
 	p.organizationSchema = newOrganizationSchema()
 	p.memberSchema = newMemberSchema(schema, p)
-	p.memberRoleSchema = newMemberRoleSchema()
+	p.memberRoleSchema = newMemberRoleSchema(p.config.customRolesEnabled)
 	p.organizationRoleSchema = newOrganizationRoleSchema()
 	p.invitationSchema = newInvitationSchema(p)
 	p.sessionSchema = schema.Session
-	return []limen.SchemaIntrospector{
+
+	schemas := []limen.SchemaIntrospector{
 		buildOrganizationTableDef(schema, p.organizationSchema),
-		buildOrganizationRoleTableDef(schema, p.organizationRoleSchema),
 		buildMemberTableDef(schema, p.memberSchema),
-		buildMemberRoleTableDef(schema, p.memberRoleSchema),
+		buildMemberRoleTableDef(schema, p.memberRoleSchema, p.config.customRolesEnabled),
 		buildInvitationTableDef(schema, p.invitationSchema),
 	}
+
+	if p.config.customRolesEnabled {
+		schemas = append(schemas, buildOrganizationRoleTableDef(schema, p.organizationRoleSchema))
+	}
+	return schemas
 }
 
 func (p *organizationPlugin) Initialize(core *limen.LimenCore) error {
@@ -79,10 +86,25 @@ func (p *organizationPlugin) Initialize(core *limen.LimenCore) error {
 		p.config.roles = roles
 	}
 
+	if err := p.validateRoles(); err != nil {
+		return err
+	}
+
 	if p.getOwnerRole() == nil {
 		return errors.New("organization: owner role must be provided")
 	}
 
+	return nil
+}
+
+func (p *organizationPlugin) validateRoles() error {
+	seen := make(map[string]bool)
+	for _, role := range p.config.roles {
+		if seen[role.Name()] {
+			return fmt.Errorf("role %q is defined multiple times", role.Name())
+		}
+		seen[role.Name()] = true
+	}
 	return nil
 }
 

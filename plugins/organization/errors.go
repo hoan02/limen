@@ -33,4 +33,15 @@ var (
 	ErrMemberMustHaveAtLeastOneRole = limen.NewLimenError("The member must have at least one role", http.StatusForbidden, nil)
 	ErrCannotRemoveLastOwner        = limen.NewLimenError("Organization must have at least one owner", http.StatusForbidden, nil)
 	ErrUserCannotManageOwnerRole    = limen.NewLimenError("Only organization owners can manage the owner role", http.StatusForbidden, nil)
+
+	ErrRoleNameReserved             = limen.NewLimenError("This role name is reserved and cannot be used", http.StatusConflict, nil)
+	ErrRoleNameAlreadyExists        = limen.NewLimenError("A role with this name already exists in this organization", http.StatusConflict, nil)
+	ErrRolePermissionsExceedGranted = limen.NewLimenError("You cannot grant permissions you do not hold", http.StatusForbidden, nil)
+	ErrRoleStillAssignedToMembers   = limen.NewLimenError("This role is still assigned to members", http.StatusConflict, nil)
+	ErrRolePermissionsCannotBeEmpty = limen.NewLimenError("The role must grant at least one permission", http.StatusBadRequest, nil)
+	ErrRoleNameCannotBeEmpty        = limen.NewLimenError("The role name is required", http.StatusBadRequest, nil)
+	ErrOrganizationRoleNotFound     = limen.NewLimenError("Role not found in this organization", http.StatusNotFound, nil)
+
+	ErrCustomRolesDisabled            = limen.NewLimenError("Custom roles are not enabled", http.StatusNotFound, nil)
+	ErrMaxRolesPerOrganizationReached = limen.NewLimenError("The organization has reached the maximum number of roles", http.StatusForbidden, nil)
 )
