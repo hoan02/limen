@@ -35,6 +35,7 @@ func (p *organizationPlugin) RegisterRoutes(httpCore *limen.LimenHTTPCore, route
 func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 	routeBuilder.ProtectedPOST("/", "organizations:create", h.CreateOrganization)
 	routeBuilder.ProtectedGET("/", "organizations:list", h.ListOrganizations)
+	routeBuilder.ProtectedPOST("/check-slug", "organizations:check-slug", h.CheckSlugAvailability)
 
 	routeBuilder.ProtectedGET("/members", "organizations:members-list", h.ListMembers,
 		h.plugin.HasPermissionMiddleware(perms("organization:read", "member:read")),
@@ -93,7 +94,7 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 func (h *organizationHandlers) CreateOrganization(w http.ResponseWriter, r *http.Request) {
 	body := limen.BindAndValidate[CreateOrganizationRequest](w, r, h.responder, func(v *limen.Validator) {
 		v.Field("name").Required().String()
-		v.Field("slug").Required().String()
+		v.Field("slug").Optional().String()
 		v.Field("logo").Optional().String()
 	})
 
@@ -120,6 +121,27 @@ func (h *organizationHandlers) CreateOrganization(w http.ResponseWriter, r *http
 
 	h.responder.AddHeader(w, HeaderActiveOrganizationID, h.plugin.clientOrganizationID(organization))
 	h.responder.JSON(w, r, http.StatusCreated, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization))
+}
+
+func (h *organizationHandlers) CheckSlugAvailability(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Field("slug").Required().String()
+	})
+
+	if body == nil {
+		return
+	}
+
+	available, err := h.plugin.CheckSlugAvailability(r.Context(), body["slug"].(string))
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, map[string]any{
+		"available": available,
+		"slug":      h.plugin.applySlugNormalization(body["slug"].(string)),
+	})
 }
 
 func (h *organizationHandlers) ListOrganizations(w http.ResponseWriter, r *http.Request) {

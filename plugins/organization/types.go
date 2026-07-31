@@ -28,6 +28,8 @@ type MaxMembersPerOrganizationFunc func(ctx context.Context, organization *Organ
 
 type MaxRolesPerOrganizationFunc func(ctx context.Context, organization *Organization) int
 
+type SlugGeneratorFunc func(name string, providedSlug string) string
+
 type CreateOrganizationRoleRequest struct {
 	Name        string              `json:"name"`
 	Description *string             `json:"description,omitempty"`
@@ -42,7 +44,8 @@ type UpdateOrganizationRoleRequest struct {
 type config struct {
 	accessControl                  *access.AccessControl
 	roles                          []access.Role
-	slugGenerator                  func(name string) string
+	slugGenerator                  SlugGeneratorFunc
+	normalizeSlugs                 bool
 	hooks                          Hooks
 	ownerRole                      string
 	maxOrgPerUser                  int
@@ -89,9 +92,19 @@ type Hooks struct {
 
 type ConfigOption func(*config)
 
-func WithSlugGenerator(slugGenerator func(name string) string) ConfigOption {
+// WithSlugGenerator derives the slug from the name and the client-provided slug,
+// which is empty when none was sent.
+func WithSlugGenerator(slugGenerator SlugGeneratorFunc) ConfigOption {
 	return func(c *config) {
 		c.slugGenerator = slugGenerator
+	}
+}
+
+// WithSlugNormalization normalizes slugs before storage and lookup: lowercase,
+// with runs of characters outside [a-z0-9] collapsed into single hyphens.
+func WithSlugNormalization(enabled bool) ConfigOption {
+	return func(c *config) {
+		c.normalizeSlugs = enabled
 	}
 }
 

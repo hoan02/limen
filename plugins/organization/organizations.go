@@ -2,13 +2,15 @@ package organization
 
 import (
 	"context"
+	"strings"
 
 	"github.com/thecodearcher/limen"
 )
 
 func (o *organizationPlugin) CreateOrganization(ctx context.Context, user *limen.User, request *CreateOrganizationRequest) (*Organization, error) {
-	if o.config.slugGenerator != nil && request.Slug == "" {
-		request.Slug = o.config.slugGenerator(request.Name)
+	request.Slug = o.applySlugNormalization(o.config.slugGenerator(request.Name, request.Slug))
+	if request.Slug == "" {
+		return nil, ErrInvalidSlug
 	}
 
 	existing, err := o.core.Exists(ctx, o.organizationSchema, []limen.Where{
@@ -138,6 +140,56 @@ func (o *organizationPlugin) ListOrganizations(ctx context.Context, user *limen.
 
 	organizations, err := o.core.FindWithOptions(ctx, o.organizationSchema, conditions, opts)
 	return limen.MapPage[*Organization](organizations), err
+}
+
+func (o *organizationPlugin) CheckSlugAvailability(ctx context.Context, slug string) (bool, error) {
+	slug = o.applySlugNormalization(slug)
+	if slug == "" {
+		return false, ErrInvalidSlug
+	}
+
+	existing, err := o.core.Exists(ctx, o.organizationSchema, []limen.Where{
+		limen.Eq(o.organizationSchema.GetSlugField(), slug),
+	})
+	if err != nil {
+		return false, err
+	}
+	return !existing, nil
+}
+
+func (o *organizationPlugin) applySlugNormalization(slug string) string {
+	if o.config.normalizeSlugs {
+		return normalizeSlug(slug)
+	}
+	return strings.TrimSpace(slug)
+}
+
+func normalizeSlug(value string) string {
+	var b strings.Builder
+	pendingHyphen := false
+	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
+		isAllowed := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if !isAllowed {
+			pendingHyphen = b.Len() > 0
+			continue
+		}
+		if pendingHyphen {
+			b.WriteRune('-')
+			pendingHyphen = false
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func defaultSlugGenerator(name string, providedSlug string) string {
+	if slug := strings.TrimSpace(providedSlug); slug != "" {
+		return slug
+	}
+	if slug := normalizeSlug(name); slug != "" {
+		return slug
+	}
+	return strings.ToLower(limen.GenerateRandomString(12, limen.CharSetAlphanumeric))
 }
 
 func (o *organizationPlugin) GetOrganization(ctx context.Context, organizationID any) (*Organization, error) {

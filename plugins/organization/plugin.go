@@ -29,6 +29,7 @@ func New(opts ...ConfigOption) *organizationPlugin {
 	config := &config{
 		hooks:                          Hooks{},
 		accessControl:                  access.New(defaultStatements),
+		slugGenerator:                  defaultSlugGenerator,
 		ownerRole:                      roleNameOwner,
 		maxOrgPerUser:                  0,
 		maxMembersPerOrganization:      0,

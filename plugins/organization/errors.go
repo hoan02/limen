@@ -10,6 +10,7 @@ var (
 	ErrNoActiveOrganization = limen.NewLimenError("No active organization", http.StatusUnauthorized, nil)
 
 	ErrOrganizationSlugAlreadyExists  = limen.NewLimenError("Organization slug not available", http.StatusConflict, nil)
+	ErrInvalidSlug                    = limen.NewLimenError("The slug must contain letters or numbers", http.StatusBadRequest, nil)
 	ErrMemberAlreadyExists            = limen.NewLimenError("You are already a member of this organization", http.StatusConflict, nil)
 	ErrMemberRoleAlreadyExists        = limen.NewLimenError("Role already assigned to this member", http.StatusConflict, nil)
 	ErrOrganizationCreationNotAllowed = limen.NewLimenError("You are not allowed to create organizations", http.StatusForbidden, nil)
