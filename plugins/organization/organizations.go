@@ -2,6 +2,7 @@ package organization
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/thecodearcher/limen"
@@ -140,6 +141,129 @@ func (o *organizationPlugin) ListOrganizations(ctx context.Context, user *limen.
 
 	organizations, err := o.core.FindWithOptions(ctx, o.organizationSchema, conditions, opts)
 	return limen.MapPage[*Organization](organizations), err
+}
+
+func (o *organizationPlugin) UpdateOrganization(ctx context.Context, user *limen.User, organizationID any, request *UpdateOrganizationRequest) (*Organization, error) {
+	organization, err := o.GetOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := o.HasPermission(ctx, user, organization.ID, perms("organization:update")); err != nil {
+		return nil, err
+	}
+
+	if request.Slug != nil {
+		slug := o.applySlugNormalization(*request.Slug)
+		if slug == "" {
+			return nil, ErrInvalidSlug
+		}
+
+		taken, err := o.core.Exists(ctx, o.organizationSchema, []limen.Where{
+			limen.Eq(o.organizationSchema.GetSlugField(), slug),
+			limen.Ne(o.organizationSchema.GetIDField(), organization.ID),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if taken {
+			return nil, ErrOrganizationSlugAlreadyExists
+		}
+		request.Slug = &slug
+	}
+
+	if o.hooks.BeforeUpdateOrganization != nil {
+		if err := o.hooks.BeforeUpdateOrganization(ctx, user, organization, request); err != nil {
+			return nil, err
+		}
+	}
+
+	payload := make(map[limen.SchemaField]any)
+	if request.Name != nil {
+		payload[OrganizationSchemaNameField] = *request.Name
+	}
+	if request.Slug != nil {
+		payload[OrganizationSchemaSlugField] = *request.Slug
+	}
+	if request.Logo != nil {
+		payload[OrganizationSchemaLogoField] = *request.Logo
+	}
+	if request.Metadata != nil {
+		encoded, err := json.Marshal(request.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		payload[OrganizationSchemaMetadataField] = string(encoded)
+	}
+
+	if len(payload) == 0 {
+		return organization, nil
+	}
+
+	updated, err := o.core.UpdateAndReturn(ctx, o.organizationSchema, payload, []limen.Where{
+		limen.Eq(o.organizationSchema.GetIDField(), organization.ID),
+	}, organization.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	updatedOrganization := updated.(*Organization)
+	if o.hooks.AfterUpdateOrganization != nil {
+		o.hooks.AfterUpdateOrganization(ctx, user, updatedOrganization)
+	}
+	return updatedOrganization, nil
+}
+
+func (o *organizationPlugin) DeleteOrganization(ctx context.Context, user *limen.User, organizationID any) error {
+	organization, err := o.GetOrganization(ctx, organizationID)
+	if err != nil {
+		return err
+	}
+
+	if err := o.HasPermission(ctx, user, organization.ID, perms("organization:delete")); err != nil {
+		return err
+	}
+
+	if o.hooks.BeforeDeleteOrganization != nil {
+		if err := o.hooks.BeforeDeleteOrganization(ctx, user, organization); err != nil {
+			return err
+		}
+	}
+
+	if err := o.core.WithTransaction(ctx, func(ctx context.Context) error {
+		type childTable struct {
+			schema         limen.Schema
+			organizationID string
+		}
+
+		children := []childTable{
+			{o.memberRoleSchema, o.memberRoleSchema.GetOrganizationIDField()},
+			{o.memberSchema, o.memberSchema.GetOrganizationIDField()},
+			{o.invitationSchema, o.invitationSchema.GetOrganizationIDField()},
+		}
+		if o.config.customRolesEnabled {
+			children = append(children, childTable{o.organizationRoleSchema, o.organizationRoleSchema.GetOrganizationIDField()})
+		}
+
+		for _, child := range children {
+			if err := o.core.Delete(ctx, child.schema, []limen.Where{
+				limen.Eq(child.organizationID, organization.ID),
+			}); err != nil {
+				return err
+			}
+		}
+
+		return o.core.Delete(ctx, o.organizationSchema, []limen.Where{
+			limen.Eq(o.organizationSchema.GetIDField(), organization.ID),
+		})
+	}); err != nil {
+		return err
+	}
+
+	if o.hooks.AfterDeleteOrganization != nil {
+		o.hooks.AfterDeleteOrganization(ctx, user, organization)
+	}
+	return nil
 }
 
 func (o *organizationPlugin) CheckSlugAvailability(ctx context.Context, slug string) (bool, error) {

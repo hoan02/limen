@@ -11,6 +11,8 @@ type API interface {
 	CreateOrganization(ctx context.Context, user *limen.User, req *CreateOrganizationRequest) (*Organization, error)
 	GetOrganization(ctx context.Context, organizationID any) (*Organization, error)
 	ListOrganizations(ctx context.Context, user *limen.User, filter *ListOrganizationsFilter, opts *limen.QueryOptions) (*limen.Page[*Organization], error)
+	UpdateOrganization(ctx context.Context, user *limen.User, organizationID any, req *UpdateOrganizationRequest) (*Organization, error)
+	DeleteOrganization(ctx context.Context, user *limen.User, organizationID any) error
 	LeaveOrganization(ctx context.Context, user *limen.User, organizationID any) error
 	CheckSlugAvailability(ctx context.Context, slug string) (bool, error)
 

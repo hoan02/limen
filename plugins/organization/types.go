@@ -18,6 +18,13 @@ type ListOrganizationsFilter struct {
 	Name *string `json:"name,omitempty"`
 }
 
+type UpdateOrganizationRequest struct {
+	Name     *string        `json:"name,omitempty"`
+	Slug     *string        `json:"slug,omitempty"`
+	Logo     *string        `json:"logo,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
 type SendInvitationMailData struct {
 	Inviter      *limen.User
 	Organization *Organization
@@ -61,6 +68,12 @@ type config struct {
 type Hooks struct {
 	BeforeCreateOrganization func(ctx context.Context, user *limen.User, request *CreateOrganizationRequest) error
 	AfterCreateOrganization  func(ctx context.Context, organization *Organization, user *limen.User, owner *Member)
+
+	BeforeUpdateOrganization func(ctx context.Context, user *limen.User, organization *Organization, request *UpdateOrganizationRequest) error
+	AfterUpdateOrganization  func(ctx context.Context, user *limen.User, organization *Organization)
+
+	BeforeDeleteOrganization func(ctx context.Context, user *limen.User, organization *Organization) error
+	AfterDeleteOrganization  func(ctx context.Context, user *limen.User, organization *Organization)
 
 	BeforeCreateInvitation func(ctx context.Context, user *limen.User, organization *Organization, request *CreateInvitationRequest) error
 	AfterCreateInvitation  func(ctx context.Context, invitation *Invitation, user *limen.User, organization *Organization)

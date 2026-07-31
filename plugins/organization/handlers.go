@@ -36,6 +36,8 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 	routeBuilder.ProtectedPOST("/", "organizations:create", h.CreateOrganization)
 	routeBuilder.ProtectedGET("/", "organizations:list", h.ListOrganizations)
 	routeBuilder.ProtectedPOST("/check-slug", "organizations:check-slug", h.CheckSlugAvailability)
+	routeBuilder.ProtectedPATCH("/:id", "organizations:update", h.UpdateOrganization)
+	routeBuilder.ProtectedDELETE("/:id", "organizations:delete", h.DeleteOrganization)
 
 	routeBuilder.ProtectedGET("/members", "organizations:members-list", h.ListMembers,
 		h.plugin.HasPermissionMiddleware(perms("organization:read", "member:read")),
@@ -121,6 +123,61 @@ func (h *organizationHandlers) CreateOrganization(w http.ResponseWriter, r *http
 
 	h.responder.AddHeader(w, HeaderActiveOrganizationID, h.plugin.clientOrganizationID(organization))
 	h.responder.JSON(w, r, http.StatusCreated, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization))
+}
+
+func (h *organizationHandlers) UpdateOrganization(w http.ResponseWriter, r *http.Request) {
+	body := limen.BindAndValidate[UpdateOrganizationRequest](w, r, h.responder, func(v *limen.Validator) {
+		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.organizationSchema, value)
+		})
+		v.Field("name").Optional().String()
+		v.Field("slug").Optional().String()
+		v.Field("logo").Optional().String()
+		v.Field("metadata").Optional().Object()
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	organization, err := h.plugin.UpdateOrganization(r.Context(), session.User, limen.GetParam(r, "id"), body)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization))
+}
+
+func (h *organizationHandlers) DeleteOrganization(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Param("id").Required().Custom(func(value any, _ map[string]any) error {
+			return limen.ValidateClientIDValue(h.plugin.core, h.plugin.organizationSchema, value)
+		})
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	if err := h.plugin.DeleteOrganization(r.Context(), session.User, limen.GetParam(r, "id")); err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusNoContent, nil)
 }
 
 func (h *organizationHandlers) CheckSlugAvailability(w http.ResponseWriter, r *http.Request) {
