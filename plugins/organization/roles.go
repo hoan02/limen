@@ -10,7 +10,7 @@ import (
 	"github.com/thecodearcher/limen/access"
 )
 
-func (o *organizationPlugin) GetOrganizationDynamicRoles(ctx context.Context, organization *Organization, roleIDs []any) ([]*access.Role, error) {
+func (o *organizationPlugin) getOrganizationDynamicRoles(ctx context.Context, organization *Organization, roleIDs []any) ([]*access.Role, error) {
 	conditions := []limen.Where{
 		limen.Eq(o.organizationRoleSchema.GetOrganizationIDField(), organization.ID),
 	}
@@ -147,7 +147,7 @@ func (o *organizationPlugin) resolveRoles(ctx context.Context, organization *Org
 		return resolvedRoles, nil
 	}
 
-	dynamicRoles, err := o.GetOrganizationDynamicRoles(ctx, organization, possiblyDynamicRoleIDs)
+	dynamicRoles, err := o.getOrganizationDynamicRoles(ctx, organization, possiblyDynamicRoleIDs)
 	if err != nil {
 		return nil, err
 	}
