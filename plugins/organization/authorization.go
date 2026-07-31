@@ -13,7 +13,7 @@ import (
 // Use this for user-initiated org switches; when membership is already known, use SetActiveOrganization instead.
 func (o *organizationPlugin) SwitchOrganization(ctx context.Context, session *limen.Session, organizationIdentifier any) (*Organization, error) {
 	if organizationIdentifier == nil {
-		if _, err := o.SetActiveOrganization(ctx, session, nil); err != nil {
+		if err := o.SetActiveOrganization(ctx, session, nil); err != nil {
 			return nil, err
 		}
 		return nil, nil
@@ -28,7 +28,7 @@ func (o *organizationPlugin) SwitchOrganization(ctx context.Context, session *li
 		return nil, err
 	}
 
-	if _, err := o.SetActiveOrganization(ctx, session, organization.ID); err != nil {
+	if err := o.SetActiveOrganization(ctx, session, organization.ID); err != nil {
 		return nil, err
 	}
 	return organization, nil
@@ -38,23 +38,26 @@ func (o *organizationPlugin) SwitchOrganization(ctx context.Context, session *li
 // Pass nil to clear the active organization.
 // Use when membership is already guaranteed, for example, right after creating an organization.
 // For user-initiated switches, use SwitchOrganization instead.
-func (o *organizationPlugin) SetActiveOrganization(ctx context.Context, session *limen.Session, organizationID any) (*limen.Session, error) {
-	metadata := session.Metadata
-	if metadata == nil {
-		metadata = make(map[string]any)
-	}
-	if organizationID == nil {
-		delete(metadata, MetadataActiveOrganizationID)
-	} else {
-		metadata[MetadataActiveOrganizationID] = organizationID
-	}
-	session.Metadata = metadata
-	if err := o.core.DBAction.UpdateSession(ctx, map[limen.SchemaField]any{limen.SessionSchemaMetadataField: metadata}, []limen.Where{
+func (o *organizationPlugin) SetActiveOrganization(ctx context.Context, session *limen.Session, organizationID any) error {
+	return o.core.DBAction.UpdateSession(ctx, map[limen.SchemaField]any{
+		SessionSchemaActiveOrganizationIDField: organizationID,
+	}, []limen.Where{
 		limen.Eq(o.sessionSchema.GetIDField(), session.ID),
-	}); err != nil {
-		return nil, err
-	}
-	return session, nil
+	})
+}
+
+func (o *organizationPlugin) GetActiveOrganizationID(session *limen.Session) any {
+	return session.Raw()[o.sessionSchema.GetActiveOrganizationIDField()]
+}
+
+func (o *organizationPlugin) clearActiveOrganizationFromSessions(ctx context.Context, organizationID any, extraConditions ...limen.Where) error {
+	conditions := append([]limen.Where{
+		limen.Eq(o.sessionSchema.GetActiveOrganizationIDField(), organizationID),
+	}, extraConditions...)
+
+	return o.core.DBAction.UpdateSession(ctx, map[limen.SchemaField]any{
+		SessionSchemaActiveOrganizationIDField: nil,
+	}, conditions)
 }
 
 func (o *organizationPlugin) HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error {

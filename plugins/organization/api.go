@@ -47,7 +47,7 @@ type API interface {
 	SwitchOrganization(ctx context.Context, session *limen.Session, organizationIdentifier any) (*Organization, error)
 	// SetActiveOrganization sets active_organization_id without a membership check.
 	// Pass nil to clear the active organization.
-	SetActiveOrganization(ctx context.Context, session *limen.Session, organizationID any) (*limen.Session, error)
+	SetActiveOrganization(ctx context.Context, session *limen.Session, organizationID any) error
 
 	HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error
 }

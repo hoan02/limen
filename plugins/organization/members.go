@@ -423,9 +423,15 @@ func (o *organizationPlugin) deleteMember(ctx context.Context, organization *Org
 			return err
 		}
 
-		return o.core.Delete(ctx, o.memberSchema, []limen.Where{
+		if err := o.core.Delete(ctx, o.memberSchema, []limen.Where{
 			limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
 			limen.Eq(o.memberSchema.GetIDField(), member.ID),
-		})
+		}); err != nil {
+			return err
+		}
+
+		return o.clearActiveOrganizationFromSessions(ctx, organization.ID,
+			limen.Eq(o.sessionSchema.GetUserIDField(), member.UserID),
+		)
 	})
 }

@@ -116,7 +116,7 @@ func (h *organizationHandlers) CreateOrganization(w http.ResponseWriter, r *http
 		return
 	}
 
-	if _, err := h.plugin.SetActiveOrganization(r.Context(), session.Session, organization.ID); err != nil {
+	if err := h.plugin.SetActiveOrganization(r.Context(), session.Session, organization.ID); err != nil {
 		h.responder.Error(w, r, err)
 		return
 	}
@@ -232,7 +232,7 @@ func (h *organizationHandlers) ListOrganizations(w http.ResponseWriter, r *http.
 }
 
 func (h *organizationHandlers) GetMember(w http.ResponseWriter, r *http.Request) {
-	session, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
+	session, organizationID, err := h.plugin.GetActiveOrganizationIDFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -247,7 +247,7 @@ func (h *organizationHandlers) GetMember(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *organizationHandlers) ListMembers(w http.ResponseWriter, r *http.Request) {
-	_, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
+	_, organizationID, err := h.plugin.GetActiveOrganizationIDFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return

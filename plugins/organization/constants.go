@@ -1,8 +1,7 @@
 package organization
 
 const (
-	HeaderActiveOrganizationID   = "X-Active-Organization-ID"
-	MetadataActiveOrganizationID = "active_organization_id"
+	HeaderActiveOrganizationID = "X-Active-Organization-ID"
 )
 
 type InvitationStatus string

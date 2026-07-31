@@ -28,21 +28,23 @@ func GetActiveOrganizationSessionFromCtx(ctx context.Context) (*SessionActiveOrg
 	return activeOrganization.(*SessionActiveOrganization), nil
 }
 
-func GetActiveOrganizationIDFromCtx(ctx context.Context) (*limen.ValidatedSession, any, error) {
+func (o *organizationPlugin) GetActiveOrganizationIDFromCtx(ctx context.Context) (*limen.ValidatedSession, any, error) {
 	session, err := limen.GetCurrentSessionFromCtx(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if session.Session.Metadata[MetadataActiveOrganizationID] == nil {
+
+	organizationID := o.GetActiveOrganizationID(session.Session)
+	if organizationID == nil {
 		return nil, nil, ErrNoActiveOrganization
 	}
-	return session, session.Session.Metadata[MetadataActiveOrganizationID], nil
+	return session, organizationID, nil
 }
 
 func (o *organizationPlugin) HasPermissionMiddleware(permissions access.Permissions) limen.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
+			session, organizationID, err := o.GetActiveOrganizationIDFromCtx(r.Context())
 			if err != nil {
 				o.responder.Error(w, r, err)
 				return
@@ -61,7 +63,7 @@ func (o *organizationPlugin) HasPermissionMiddleware(permissions access.Permissi
 func (o *organizationPlugin) CanAccessOrganizationMiddleware() limen.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
+			session, organizationID, err := o.GetActiveOrganizationIDFromCtx(r.Context())
 			if err != nil {
 				o.responder.Error(w, r, err)
 				return
@@ -79,7 +81,7 @@ func (o *organizationPlugin) CanAccessOrganizationMiddleware() limen.Middleware 
 func (o *organizationPlugin) RequireActiveOrganizationMiddleware() limen.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := GetActiveOrganizationIDFromCtx(r.Context())
+			session, organizationID, err := o.GetActiveOrganizationIDFromCtx(r.Context())
 			if err != nil {
 				o.responder.Error(w, r, err)
 				return
