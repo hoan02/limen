@@ -100,6 +100,16 @@ func (o *organizationPlugin) RevokeMemberRole(ctx context.Context, user *limen.U
 		return err
 	}
 
+	resolvedRole, err := o.resolveRoles(ctx, organization, []any{roleToRevoke})
+	if err != nil {
+		return err
+	}
+
+	role := resolvedRole[0]
+	if err := o.checkMemberHasRole(ctx, member, role); err != nil {
+		return err
+	}
+
 	existingRolesCount, err := o.core.Count(ctx, o.memberRoleSchema, []limen.Where{
 		limen.Eq(o.memberRoleSchema.GetMemberIDField(), member.ID),
 	})
@@ -112,12 +122,6 @@ func (o *organizationPlugin) RevokeMemberRole(ctx context.Context, user *limen.U
 		return ErrMemberMustHaveAtLeastOneRole
 	}
 
-	resolvedRole, err := o.resolveRoles(ctx, organization, []any{roleToRevoke})
-	if err != nil {
-		return err
-	}
-
-	role := resolvedRole[0]
 	if err := o.validateOwnerRoleCanBeRemoved(ctx, organization, role); err != nil {
 		return err
 	}
@@ -126,26 +130,19 @@ func (o *organizationPlugin) RevokeMemberRole(ctx context.Context, user *limen.U
 		return ErrUserCannotManageOwnerRole
 	}
 
-	conditions := []limen.Where{
-		limen.Eq(o.memberRoleSchema.GetMemberIDField(), member.ID),
-	}
-
-	if role.ID() != nil {
-		conditions = append(conditions, limen.Eq(o.memberRoleSchema.GetOrganizationRoleIDField(), role.ID()))
-	}
-
-	if role.ID() == nil {
-		conditions = append(conditions, limen.Eq(o.memberRoleSchema.GetRoleField(), role.Name()))
-	}
-
 	if o.hooks.BeforeRevokeMemberRole != nil {
 		if err := o.hooks.BeforeRevokeMemberRole(ctx, user, organization, member, role); err != nil {
 			return err
 		}
 	}
 
-	if err := o.core.Delete(ctx, o.memberRoleSchema, conditions); err != nil {
+	result, err := o.core.DeleteWithResult(ctx, o.memberRoleSchema, o.memberRoleConditions(member, role))
+	if err != nil {
 		return err
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrMemberRoleNotAssigned
 	}
 
 	if o.hooks.AfterRevokeMemberRole != nil {
@@ -399,6 +396,28 @@ func (o *organizationPlugin) assignMemberRole(ctx context.Context, member *Membe
 		return err
 	}
 
+	return nil
+}
+
+func (o *organizationPlugin) memberRoleConditions(member *Member, role *access.Role) []limen.Where {
+	conditions := []limen.Where{
+		limen.Eq(o.memberRoleSchema.GetMemberIDField(), member.ID),
+	}
+	if role.ID() != nil {
+		return append(conditions, limen.Eq(o.memberRoleSchema.GetOrganizationRoleIDField(), role.ID()))
+	}
+	return append(conditions, limen.Eq(o.memberRoleSchema.GetRoleField(), role.Name()))
+}
+
+func (o *organizationPlugin) checkMemberHasRole(ctx context.Context, member *Member, role *access.Role) error {
+	held, err := o.core.Exists(ctx, o.memberRoleSchema, o.memberRoleConditions(member, role))
+	if err != nil {
+		return err
+	}
+
+	if !held {
+		return ErrMemberRoleNotAssigned
+	}
 	return nil
 }
 

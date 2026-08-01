@@ -38,6 +38,8 @@ func (o *organizationPlugin) CreateInvitation(ctx context.Context, user *limen.U
 		return nil, err
 	}
 
+	req.Email = limen.NormalizeEmail(req.Email)
+
 	invitation, err := o.FindPendingInvitation(ctx, &FindPendingInvitationOptions{
 		Email:          req.Email,
 		OrganizationID: organization.ID,
@@ -96,7 +98,7 @@ func (o *organizationPlugin) FindPendingInvitation(ctx context.Context, options 
 		conditions = append(conditions, limen.Eq(o.invitationSchema.GetOrganizationIDField(), options.OrganizationID))
 	}
 	if options.Email != "" {
-		conditions = append(conditions, limen.Eq(o.invitationSchema.GetEmailField(), options.Email))
+		conditions = append(conditions, limen.Eq(o.invitationSchema.GetEmailField(), limen.NormalizeEmail(options.Email)))
 	}
 	if options.InvitationToken != "" {
 		conditions = append(conditions, limen.Eq(o.invitationSchema.GetTokenField(), options.InvitationToken))
@@ -168,8 +170,10 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		status = InvitationStatusRejected
 	}
 
-	if err := o.checkOrganizationMemberLimit(ctx, organization); err != nil {
-		return nil, err
+	if status == InvitationStatusAccepted {
+		if err := o.checkOrganizationMemberLimit(ctx, organization); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{}); err != nil {
@@ -442,7 +446,7 @@ func (o *organizationPlugin) createNewInvitation(ctx context.Context, user *lime
 	payload := &Invitation{
 		InviterID:      user.ID,
 		OrganizationID: organization.ID,
-		Email:          req.Email,
+		Email:          limen.NormalizeEmail(req.Email),
 		Status:         InvitationStatusPending,
 		Roles:          []any{role},
 		Token:          limen.GenerateRandomString(32, limen.CharSetAlphanumeric),

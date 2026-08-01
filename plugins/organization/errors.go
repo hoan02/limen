@@ -32,6 +32,7 @@ var (
 	ErrMaxMembersPerOrganizationReached = limen.NewLimenError("The organization has reached the maximum number of members", http.StatusForbidden, nil)
 
 	ErrMemberMustHaveAtLeastOneRole = limen.NewLimenError("The member must have at least one role", http.StatusForbidden, nil)
+	ErrMemberRoleNotAssigned        = limen.NewLimenError("The member does not have this role", http.StatusNotFound, nil)
 	ErrCannotRemoveLastOwner        = limen.NewLimenError("Organization must have at least one owner", http.StatusForbidden, nil)
 	ErrUserCannotManageOwnerRole    = limen.NewLimenError("Only organization owners can manage the owner role", http.StatusForbidden, nil)
 
