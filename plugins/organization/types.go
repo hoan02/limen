@@ -37,6 +37,10 @@ type MaxRolesPerOrganizationFunc func(ctx context.Context, organization *Organiz
 
 type SlugGeneratorFunc func(name string, providedSlug string) string
 
+type EmbeddedUserSerializerFunc func(user *limen.User) map[string]any
+
+type EmbeddedOrganizationSerializerFunc func(organization *Organization) map[string]any
+
 type CreateOrganizationRoleRequest struct {
 	Name        string              `json:"name"`
 	Description *string             `json:"description,omitempty"`
@@ -63,6 +67,8 @@ type config struct {
 	invitationExpirationSeconds    int
 	customRolesEnabled             bool
 	maxRolesPerOrganization        any
+	embeddedUser                   any
+	embeddedOrganization           any
 }
 
 type Hooks struct {
@@ -212,5 +218,38 @@ func WithMaxRolesPerOrganization(maxRolesPerOrganization int) ConfigOption {
 func WithMaxRolesPerOrganizationFunc(maxRolesPerOrganizationFunc MaxRolesPerOrganizationFunc) ConfigOption {
 	return func(c *config) {
 		c.maxRolesPerOrganization = maxRolesPerOrganizationFunc
+	}
+}
+
+// WithEmbeddedUserFields limits the nested user object that organization responses carry,
+// such as an invitation's "inviter" or a member's "user", to the given fields.
+// Never exposes more than the core user serializer does.
+func WithEmbeddedUserFields(fields ...limen.SchemaField) ConfigOption {
+	return func(c *config) {
+		c.embeddedUser = fields
+	}
+}
+
+// WithEmbeddedUserSerializer builds the nested user object that organization responses carry,
+// such as an invitation's "inviter" or a member's "user".
+func WithEmbeddedUserSerializer(serializer EmbeddedUserSerializerFunc) ConfigOption {
+	return func(c *config) {
+		c.embeddedUser = serializer
+	}
+}
+
+// WithEmbeddedOrganizationFields limits the nested organization object that responses carry,
+// such as an invitation's "organization", to the given fields.
+func WithEmbeddedOrganizationFields(fields ...limen.SchemaField) ConfigOption {
+	return func(c *config) {
+		c.embeddedOrganization = fields
+	}
+}
+
+// WithEmbeddedOrganizationSerializer builds the nested organization object that responses
+// carry, such as an invitation's "organization".
+func WithEmbeddedOrganizationSerializer(serializer EmbeddedOrganizationSerializerFunc) ConfigOption {
+	return func(c *config) {
+		c.embeddedOrganization = serializer
 	}
 }

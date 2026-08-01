@@ -283,7 +283,10 @@ func (o *organizationPlugin) GetMemberWithRelations(ctx context.Context, user *l
 	return member, nil
 }
 
-func (o *organizationPlugin) ListMembers(ctx context.Context, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error) {
+func (o *organizationPlugin) ListMembers(ctx context.Context, user *limen.User, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error) {
+	if err := o.HasPermission(ctx, user, organizationID, perms("member:read")); err != nil {
+		return nil, err
+	}
 	members, err := o.core.FindWithOptions(ctx, o.memberSchema, []limen.Where{
 		limen.Eq(o.memberSchema.GetOrganizationIDField(), organizationID),
 	}, opts)
@@ -294,11 +297,7 @@ func (o *organizationPlugin) ListMembers(ctx context.Context, organizationID any
 }
 
 func (o *organizationPlugin) ListMembersWithRelations(ctx context.Context, user *limen.User, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error) {
-	if err := o.HasPermission(ctx, user, organizationID, perms("member:read")); err != nil {
-		return nil, err
-	}
-
-	page, err := o.ListMembers(ctx, organizationID, opts)
+	page, err := o.ListMembers(ctx, user, organizationID, opts)
 	if err != nil {
 		return nil, err
 	}

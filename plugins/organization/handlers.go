@@ -369,7 +369,7 @@ func (h *organizationHandlers) ListInvitations(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	invitations, err := h.plugin.ListInvitations(r.Context(), session.Session.User, session.Organization, options)
+	invitations, err := h.plugin.ListInvitationsWithRelations(r.Context(), session.Session.User, session.Organization, options)
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return

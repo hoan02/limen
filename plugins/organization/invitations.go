@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/thecodearcher/limen"
+	"github.com/thecodearcher/limen/access"
 )
 
 type CreateInvitationRequest struct {
@@ -20,6 +21,11 @@ type FindPendingInvitationOptions struct {
 	Email           string
 	OrganizationID  any
 	InvitationToken string
+}
+
+type InvitationRelations struct {
+	Inviter      bool
+	Organization bool
 }
 
 type ListInvitationsOptions struct {
@@ -62,6 +68,12 @@ func (o *organizationPlugin) CreateInvitation(ctx context.Context, user *limen.U
 	invitation, err = o.processInvitationCreation(ctx, user, organization, req, role, invitation)
 	if err != nil {
 		return nil, err
+	}
+
+	if invitation != nil {
+		if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{}); err != nil {
+			return nil, err
+		}
 	}
 
 	if o.config.hooks.AfterCreateInvitation != nil {
@@ -134,6 +146,10 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		return nil, err
 	}
 
+	if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{}); err != nil {
+		return nil, err
+	}
+
 	if o.config.hooks.BeforeRespondToInvitation != nil {
 		if err := o.config.hooks.BeforeRespondToInvitation(ctx, user, organization, invitation, response); err != nil {
 			return nil, err
@@ -188,6 +204,10 @@ func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, user *
 		return nil, ErrInvalidInvitation
 	}
 
+	if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{}); err != nil {
+		return nil, err
+	}
+
 	if o.config.hooks.BeforeCancelInvitation != nil {
 		if err := o.config.hooks.BeforeCancelInvitation(ctx, user, organization, invitation); err != nil {
 			return nil, err
@@ -226,6 +246,122 @@ func (o *organizationPlugin) ListInvitations(ctx context.Context, user *limen.Us
 		return nil, err
 	}
 	return limen.MapPage[*Invitation](page), nil
+}
+
+func (o *organizationPlugin) ListInvitationsWithRelations(ctx context.Context, user *limen.User, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error) {
+	page, err := o.ListInvitations(ctx, user, organization, options)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.attachInvitationRelations(ctx, organization, page.Items, InvitationRelations{}); err != nil {
+		return nil, err
+	}
+	return page, nil
+}
+
+func (o *organizationPlugin) attachInvitationRelations(ctx context.Context, organization *Organization, invitations []*Invitation, relations InvitationRelations) error {
+	if len(invitations) == 0 {
+		return nil
+	}
+
+	if err := o.attachInvitationRoles(ctx, organization, invitations); err != nil {
+		return err
+	}
+
+	if relations.Organization {
+		for _, invitation := range invitations {
+			invitation.Organization = organization
+		}
+	}
+
+	if !relations.Inviter {
+		return nil
+	}
+	return o.attachInvitationInviters(ctx, invitations)
+}
+
+func (o *organizationPlugin) attachInvitationRoles(ctx context.Context, organization *Organization, invitations []*Invitation) error {
+	identifiers := o.distinctRoleIdentifiers(invitations)
+	if len(identifiers) == 0 {
+		return nil
+	}
+
+	resolvedRoles, err := o.resolveRoles(ctx, organization, identifiers)
+	if err != nil {
+		return err
+	}
+
+	rolesByID := make(map[any]*access.Role, len(resolvedRoles))
+	for _, role := range resolvedRoles {
+		rolesByID[roleKey(role)] = role
+	}
+
+	for _, invitation := range invitations {
+		invitation.ResolvedRoles = o.rolesForInvitation(invitation, rolesByID)
+	}
+	return nil
+}
+
+func (o *organizationPlugin) distinctRoleIdentifiers(invitations []*Invitation) []any {
+	identifiers := make([]any, 0)
+	seen := make(map[any]struct{})
+	for _, invitation := range invitations {
+		for _, identifier := range invitation.Roles {
+			normalized := o.normalizeRoleIdentifier(identifier)
+			if _, ok := seen[normalized]; ok {
+				continue
+			}
+			seen[normalized] = struct{}{}
+			identifiers = append(identifiers, normalized)
+		}
+	}
+	return identifiers
+}
+
+func (o *organizationPlugin) rolesForInvitation(invitation *Invitation, rolesByID map[any]*access.Role) []*access.Role {
+	roles := make([]*access.Role, 0, len(invitation.Roles))
+	for _, identifier := range invitation.Roles {
+		if role := rolesByID[o.normalizeRoleIdentifier(identifier)]; role != nil {
+			roles = append(roles, role)
+		}
+	}
+	return roles
+}
+
+func (o *organizationPlugin) attachInvitationInviters(ctx context.Context, invitations []*Invitation) error {
+	inviterIDs := make([]any, 0, len(invitations))
+	seen := make(map[any]struct{})
+	for _, invitation := range invitations {
+		if invitation.InviterID == nil {
+			continue
+		}
+		if _, ok := seen[invitation.InviterID]; ok {
+			continue
+		}
+		seen[invitation.InviterID] = struct{}{}
+		inviterIDs = append(inviterIDs, invitation.InviterID)
+	}
+
+	if len(inviterIDs) == 0 {
+		return nil
+	}
+
+	users, err := o.core.FindMany(ctx, o.core.Schema.User, []limen.Where{
+		limen.In(o.core.Schema.User.GetIDField(), inviterIDs),
+	})
+	if err != nil {
+		return err
+	}
+
+	usersByID := make(map[any]*limen.User, len(users))
+	for _, user := range limen.MapToSliceOfType[*limen.User](users) {
+		usersByID[user.ID] = user
+	}
+
+	for _, invitation := range invitations {
+		invitation.Inviter = usersByID[invitation.InviterID]
+	}
+	return nil
 }
 
 func (o *organizationPlugin) processInvitationCreation(ctx context.Context, user *limen.User, organization *Organization, req *CreateInvitationRequest, role any, invitation *Invitation) (*Invitation, error) {

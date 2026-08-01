@@ -69,7 +69,7 @@ func (c *LimenCore) SerializeModel(schema Schema, model Model) map[string]any {
 	serialized := maps.Clone(schema.Serialize(model))
 	_, config, enabled := c.getPublicIDConfig(schema)
 
-	if _, ok := serialized[schema.GetIDField()].(int64); ok {
+	if _, ok := serialized[schema.GetIDField()].(string); !ok {
 		delete(serialized, schema.GetIDField())
 	}
 

@@ -52,7 +52,7 @@ func (p *organizationPlugin) Name() limen.PluginName {
 
 func (p *organizationPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.SchemaIntrospector {
 	p.organizationSchema = newOrganizationSchema()
-	p.memberSchema = newMemberSchema(schema, p)
+	p.memberSchema = newMemberSchema(p)
 	p.memberRoleSchema = newMemberRoleSchema(p.config.customRolesEnabled)
 	p.organizationRoleSchema = newOrganizationRoleSchema()
 	p.invitationSchema = newInvitationSchema(p)
@@ -132,4 +132,47 @@ func (o *organizationPlugin) clientOrganizationID(org *Organization) string {
 
 func perms(specs ...string) access.Permissions {
 	return access.P(specs...)
+}
+
+func (o *organizationPlugin) serializeEmbeddedUser(user *limen.User) map[string]any {
+	if user == nil {
+		return nil
+	}
+
+	if serializer, ok := o.config.embeddedUser.(EmbeddedUserSerializerFunc); ok {
+		return serializer(user)
+	}
+
+	fields := embeddedFields(o.config.embeddedUser, defaultEmbeddedUserFields)
+	return filterSerialized(o.core.SerializeModel(o.core.Schema.User, user), fields)
+}
+
+func (o *organizationPlugin) serializeEmbeddedOrganization(organization *Organization) map[string]any {
+	if organization == nil {
+		return nil
+	}
+
+	if serializer, ok := o.config.embeddedOrganization.(EmbeddedOrganizationSerializerFunc); ok {
+		return serializer(organization)
+	}
+
+	fields := embeddedFields(o.config.embeddedOrganization, defaultEmbeddedOrganizationFields)
+	return filterSerialized(o.core.SerializeModel(o.organizationSchema, organization), fields)
+}
+
+func embeddedFields(configured any, defaults []limen.SchemaField) []limen.SchemaField {
+	if fields, ok := configured.([]limen.SchemaField); ok {
+		return fields
+	}
+	return defaults
+}
+
+func filterSerialized(serialized map[string]any, fields []limen.SchemaField) map[string]any {
+	filtered := make(map[string]any, len(fields))
+	for _, field := range fields {
+		if value, ok := serialized[string(field)]; ok {
+			filtered[string(field)] = value
+		}
+	}
+	return filtered
 }

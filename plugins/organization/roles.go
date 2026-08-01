@@ -274,6 +274,20 @@ func (o *organizationPlugin) validateGrantablePermissions(ctx context.Context, u
 	return nil
 }
 
+func (o *organizationPlugin) normalizeRoleIdentifier(identifier any) any {
+	value, ok := identifier.(float64)
+	if !ok {
+		return identifier
+	}
+
+	switch o.core.Schema.GetIDColumnType() {
+	case limen.ColumnTypeInt, limen.ColumnTypeInt32, limen.ColumnTypeInt64:
+		return int64(value)
+	default:
+		return identifier
+	}
+}
+
 func (o *organizationPlugin) getOrganizationDynamicRoles(ctx context.Context, organization *Organization, roleIDs []any) ([]*access.Role, error) {
 	if !o.config.customRolesEnabled {
 		return nil, nil
@@ -408,7 +422,7 @@ func (o *organizationPlugin) resolveRoles(ctx context.Context, organization *Org
 		if !o.core.Schema.MatchesIDColumnType(role) {
 			return nil, ErrFailedToResolveRoles
 		}
-		possiblyDynamicRoleIDs = append(possiblyDynamicRoleIDs, role)
+		possiblyDynamicRoleIDs = append(possiblyDynamicRoleIDs, o.normalizeRoleIdentifier(role))
 	}
 
 	if len(resolvedRoles) == len(roles) {
@@ -425,4 +439,11 @@ func (o *organizationPlugin) resolveRoles(ctx context.Context, organization *Org
 		return nil, ErrFailedToResolveRoles
 	}
 	return resolvedRoles, nil
+}
+
+func roleKey(role *access.Role) any {
+	if id := role.ID(); id != nil {
+		return id
+	}
+	return role.Name()
 }

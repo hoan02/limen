@@ -20,7 +20,7 @@ type API interface {
 	GetMemberByUserID(ctx context.Context, organizationID, userID any) (*Member, error)
 	GetMemberByID(ctx context.Context, organization *Organization, memberID any) (*Member, error)
 	GetMemberWithRelations(ctx context.Context, user *limen.User, organizationID any) (*Member, error)
-	ListMembers(ctx context.Context, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error)
+	ListMembers(ctx context.Context, user *limen.User, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error)
 	ListMembersWithRelations(ctx context.Context, user *limen.User, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error)
 	GetMemberRoles(ctx context.Context, memberID any) ([]*access.Role, error)
 	AssignMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, role any) error
@@ -40,6 +40,7 @@ type API interface {
 	RespondToInvitation(ctx context.Context, user *limen.User, invitationToken string, response InvitationResponse) (*Invitation, error)
 	CancelPendingInvitation(ctx context.Context, user *limen.User, organization *Organization, invitationID any) (*Invitation, error)
 	ListInvitations(ctx context.Context, user *limen.User, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error)
+	ListInvitationsWithRelations(ctx context.Context, user *limen.User, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error)
 
 	// SwitchOrganization sets the active organization after verifying membership.
 	// Pass nil to clear the active organization.

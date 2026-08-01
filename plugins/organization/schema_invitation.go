@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/thecodearcher/limen"
+	"github.com/thecodearcher/limen/access"
 )
 
 type Invitation struct {
@@ -20,8 +21,9 @@ type Invitation struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	Organization *Organization
-	Inviter      *limen.User
+	Organization  *Organization
+	Inviter       *limen.User
+	ResolvedRoles []*access.Role
 
 	raw map[string]any
 }
@@ -63,18 +65,16 @@ func invitationSerializer(plugin *organizationPlugin) limen.ModelTransformer {
 			"updated_at": inv.UpdatedAt,
 		}
 
-		if inv.Roles != nil {
-			if b, err := json.Marshal(inv.Roles); err == nil {
-				payload["roles"] = json.RawMessage(b)
-			}
+		if inv.ResolvedRoles != nil {
+			payload["roles"] = SortedRoleNames(inv.ResolvedRoles)
 		}
 
 		if inv.Organization != nil {
-			payload["organization"] = plugin.core.SerializeModel(plugin.organizationSchema, inv.Organization)
+			payload["organization"] = plugin.serializeEmbeddedOrganization(inv.Organization)
 		}
 
 		if inv.Inviter != nil {
-			payload["inviter"] = plugin.core.SerializeModel(plugin.core.Schema.User, inv.Inviter)
+			payload["inviter"] = plugin.serializeEmbeddedUser(inv.Inviter)
 		}
 
 		return payload

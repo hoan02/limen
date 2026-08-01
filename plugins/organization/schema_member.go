@@ -41,15 +41,15 @@ type memberSchema struct {
 	limen.BaseSchema
 }
 
-func newMemberSchema(schema *limen.SchemaConfig, plugin *organizationPlugin) *memberSchema {
+func newMemberSchema(plugin *organizationPlugin) *memberSchema {
 	return &memberSchema{
 		BaseSchema: limen.BaseSchema{
-			Serializer: memberSerializer(schema, plugin),
+			Serializer: memberSerializer(plugin),
 		},
 	}
 }
 
-func memberSerializer(schema *limen.SchemaConfig, plugin *organizationPlugin) limen.ModelTransformer {
+func memberSerializer(plugin *organizationPlugin) limen.ModelTransformer {
 	return limen.ModelTransformer(func(data limen.Model) map[string]any {
 		member := data.(*Member)
 		payload := maps.Clone(member.raw)
@@ -65,7 +65,7 @@ func memberSerializer(schema *limen.SchemaConfig, plugin *organizationPlugin) li
 		}
 
 		if member.User != nil {
-			payload["user"] = plugin.core.SerializeModel(schema.User, member.User)
+			payload["user"] = plugin.serializeEmbeddedUser(member.User)
 		}
 
 		delete(payload, "organization_id")
@@ -75,10 +75,8 @@ func memberSerializer(schema *limen.SchemaConfig, plugin *organizationPlugin) li
 }
 
 func SerializeMemberRoles(member *Member) map[string]any {
-	roleNames := make([]string, len(member.Roles))
 	perms := make([]access.Permissions, 0, len(member.Roles))
-	for i, role := range member.Roles {
-		roleNames[i] = role.Name()
+	for _, role := range member.Roles {
 		perms = append(perms, role.Permissions())
 	}
 
@@ -90,11 +88,20 @@ func SerializeMemberRoles(member *Member) map[string]any {
 		}
 	}
 	slices.Sort(permissions)
-	slices.Sort(roleNames)
+
 	return map[string]any{
-		"roles":       roleNames,
+		"roles":       SortedRoleNames(member.Roles),
 		"permissions": permissions,
 	}
+}
+
+func SortedRoleNames(roles []*access.Role) []string {
+	names := make([]string, len(roles))
+	for i, role := range roles {
+		names[i] = role.Name()
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (s *memberSchema) GetOrganizationIDField() string {
