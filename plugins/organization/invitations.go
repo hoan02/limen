@@ -120,6 +120,32 @@ func (o *organizationPlugin) FindPendingInvitation(ctx context.Context, options 
 	return invitation, nil
 }
 
+func (o *organizationPlugin) GetInvitationByToken(ctx context.Context, user *limen.User, invitationToken string) (*Invitation, error) {
+	invitation, err := o.FindPendingInvitation(ctx, &FindPendingInvitationOptions{InvitationToken: invitationToken})
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := o.GetOrganization(ctx, invitation.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !strings.EqualFold(invitation.Email, user.Email) {
+		if err := o.HasPermission(ctx, user, organization.ID, perms("invitation:read")); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{
+		Inviter:      true,
+		Organization: true,
+	}); err != nil {
+		return nil, err
+	}
+	return invitation, nil
+}
+
 func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *limen.User, invitationToken string, response InvitationResponse) (*Invitation, error) {
 	invitation, err := o.FindPendingInvitation(ctx, &FindPendingInvitationOptions{
 		InvitationToken: invitationToken,

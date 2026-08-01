@@ -46,6 +46,7 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 
 	routeBuilder.ProtectedPOST("/invitations", "organizations:invite-member", h.InviteMember, h.plugin.RequireActiveOrganizationMiddleware())
 	routeBuilder.ProtectedPOST("/invitations/respond", "organizations:respond-to-invitation", h.RespondToInvitation)
+	routeBuilder.ProtectedGET("/invitations/token/:token", "organizations:get-invitation-by-token", h.GetInvitationByToken)
 	routeBuilder.ProtectedPOST("/invitations/cancel", "organizations:cancel-pending-invitation", h.CancelPendingInvitation, h.plugin.RequireActiveOrganizationMiddleware())
 	routeBuilder.ProtectedGET("/invitations", "organizations:list-invitations", h.ListInvitations, h.plugin.RequireActiveOrganizationMiddleware())
 
@@ -310,6 +311,30 @@ func (h *organizationHandlers) RespondToInvitation(w http.ResponseWriter, r *htt
 	}
 
 	invitation, err := h.plugin.RespondToInvitation(r.Context(), session.User, body["token"].(string), InvitationResponse(body["response"].(string)))
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.invitationSchema, invitation))
+}
+
+func (h *organizationHandlers) GetInvitationByToken(w http.ResponseWriter, r *http.Request) {
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Param("token").Required().String()
+	})
+
+	if body == nil {
+		return
+	}
+
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	invitation, err := h.plugin.GetInvitationByToken(r.Context(), session.User, limen.GetParam(r, "token"))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return

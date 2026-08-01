@@ -37,6 +37,7 @@ type API interface {
 
 	CreateInvitation(ctx context.Context, user *limen.User, organization *Organization, req *CreateInvitationRequest) (*Invitation, error)
 	FindPendingInvitation(ctx context.Context, options *FindPendingInvitationOptions) (*Invitation, error)
+	GetInvitationByToken(ctx context.Context, user *limen.User, invitationToken string) (*Invitation, error)
 	RespondToInvitation(ctx context.Context, user *limen.User, invitationToken string, response InvitationResponse) (*Invitation, error)
 	CancelPendingInvitation(ctx context.Context, user *limen.User, organization *Organization, invitationID any) (*Invitation, error)
 	ListInvitations(ctx context.Context, user *limen.User, organization *Organization, options *ListInvitationsOptions) (*limen.Page[*Invitation], error)
