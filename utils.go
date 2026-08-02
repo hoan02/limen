@@ -285,6 +285,13 @@ func GetNullableValue[T any](value any) *T {
 	if v, ok := value.(T); ok {
 		return &v
 	}
+	if v, ok := value.(*T); ok {
+		if v == nil {
+			return nil
+		}
+		cp := *v
+		return &cp
+	}
 	return nil
 }
 
@@ -311,8 +318,17 @@ func getTime(v any) time.Time {
 	if v == nil {
 		return time.Time{}
 	}
-	t, _ := v.(time.Time)
-	return t
+	switch t := v.(type) {
+	case time.Time:
+		return t
+	case *time.Time:
+		if t == nil {
+			return time.Time{}
+		}
+		return *t
+	default:
+		return time.Time{}
+	}
 }
 
 func joinCustomStringSlice[T ~string](fields []T, separator string) string {

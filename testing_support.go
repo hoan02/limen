@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -270,9 +271,9 @@ func testMatchesSingle(row map[string]any, c Where) bool {
 
 	switch c.Operator {
 	case OpIsNull:
-		return val == nil
+		return testIsNil(val)
 	case OpIsNotNull:
-		return val != nil
+		return !testIsNil(val)
 	case OpEq, "":
 		return testValuesEqual(val, c.Value)
 	case OpNe:
@@ -329,7 +330,55 @@ func testValuesEqual(a, b any) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a == b
+	if a == b {
+		return true
+	}
+	// Named string types (e.g. InvitationStatus) must match plain strings.
+	if as, ok := testStringValue(a); ok {
+		bs, ok := testStringValue(b)
+		return ok && as == bs
+	}
+	return false
+}
+
+func testStringValue(value any) (string, bool) {
+	switch v := value.(type) {
+	case string:
+		return v, true
+	default:
+		rv := reflect.ValueOf(value)
+		if rv.Kind() == reflect.String {
+			return rv.String(), true
+		}
+		return "", false
+	}
+}
+
+func testIsNil(value any) bool {
+	if value == nil {
+		return true
+	}
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func, reflect.Chan:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
+func testAsTime(value any) (time.Time, bool) {
+	switch v := value.(type) {
+	case time.Time:
+		return v, true
+	case *time.Time:
+		if v == nil {
+			return time.Time{}, false
+		}
+		return *v, true
+	default:
+		return time.Time{}, false
+	}
 }
 
 func testCompareValues(a, b any) (int, bool) {
@@ -341,13 +390,15 @@ func testCompareValues(a, b any) (int, bool) {
 		return cmp.Compare(av, bv), true
 	}
 
-	switch av := a.(type) {
-	case time.Time:
-		bv, ok := b.(time.Time)
+	if av, ok := testAsTime(a); ok {
+		bv, ok := testAsTime(b)
 		if !ok {
 			return 0, false
 		}
 		return av.Compare(bv), true
+	}
+
+	switch av := a.(type) {
 	case string:
 		bv, ok := b.(string)
 		if !ok {
@@ -443,8 +494,8 @@ func SeedTestUser(t *testing.T, l *Limen, email string) *User {
 	return user
 }
 
-// SeedTestSession creates a session via the real SessionManager and returns the
-// SessionResult. The user must already exist.
+// SeedTestSession creates a session and returns its SessionResult.
+// The user must already exist.
 func SeedTestSession(t *testing.T, l *Limen, userID any, email string) *SessionResult {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/signin", http.NoBody)
@@ -454,4 +505,26 @@ func SeedTestSession(t *testing.T, l *Limen, userID any, email string) *SessionR
 		t.Fatalf("SeedTestSession: %v", err)
 	}
 	return result
+}
+
+// SeedTestSessionRecord creates a session and returns the stored *Session.
+func SeedTestSessionRecord(t *testing.T, l *Limen, userID any, email string) *Session {
+	t.Helper()
+
+	result := SeedTestSession(t, l, userID, email)
+	if result.Token == "" {
+		t.Fatal("SeedTestSessionRecord: empty session token")
+	}
+
+	sessions, err := l.ListSessions(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("SeedTestSessionRecord: %v", err)
+	}
+	for i := range sessions {
+		if sessions[i].Token == result.Token {
+			return &sessions[i]
+		}
+	}
+	t.Fatalf("SeedTestSessionRecord: session for token %q not found", result.Token)
+	return nil
 }
