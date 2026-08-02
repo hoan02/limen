@@ -33,7 +33,10 @@ func (o *organizationPlugin) GetActiveOrganizationIDFromCtx(ctx context.Context)
 		return nil, nil, err
 	}
 
-	organizationID := o.GetActiveOrganizationID(session.Session)
+	organizationID, err := o.GetActiveOrganizationID(ctx, session.Session)
+	if err != nil {
+		return nil, nil, err
+	}
 	if organizationID == nil {
 		return nil, nil, ErrNoActiveOrganization
 	}

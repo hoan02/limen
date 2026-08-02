@@ -25,9 +25,10 @@ var (
 
 // Session-specific errors
 var (
-	ErrSessionNotFound = errors.New("session not found")
-	ErrSessionExpired  = errors.New("session has expired")
-	ErrSessionInvalid  = errors.New("session is invalid")
+	ErrSessionNotFound     = errors.New("session not found")
+	ErrSessionExpired      = errors.New("session has expired")
+	ErrSessionInvalid      = errors.New("session is invalid")
+	ErrUnknownSessionField = errors.New("session field is not registered on the sessions schema")
 )
 
 // Rate limiting errors

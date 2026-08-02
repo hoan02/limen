@@ -95,6 +95,22 @@ func (c *SchemaConfig) MatchesIDColumnType(value any) bool {
 	}
 }
 
+// NormalizeIDValue converts a JSON-decoded identifier back to the configured
+// ID column type; other values pass through unchanged.
+func (c *SchemaConfig) NormalizeIDValue(value any) any {
+	v, ok := value.(float64)
+	if !ok {
+		return value
+	}
+
+	switch c.GetIDColumnType() {
+	case ColumnTypeInt, ColumnTypeInt32, ColumnTypeInt64:
+		return int64(v)
+	default:
+		return value
+	}
+}
+
 func (c *SchemaConfig) getPublicIDConfig(schemaName SchemaName) (*PublicIDConfig, bool) {
 	if c.publicID == nil || c.publicID.Disabled {
 		return nil, false

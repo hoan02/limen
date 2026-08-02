@@ -10,10 +10,6 @@ type sessionSchema struct {
 	*limen.SessionSchema
 }
 
-func (s *sessionSchema) GetActiveOrganizationIDField() string {
-	return s.GetField(SessionSchemaActiveOrganizationIDField)
-}
-
 func buildSessionActiveOrgExtension(schemaConfig *limen.SchemaConfig) *limen.SchemaDefinition {
 	return limen.NewSchemaDefinitionForExtension(
 		limen.CoreSchemaSessions,

@@ -253,7 +253,7 @@ func (o *organizationPlugin) DeleteOrganization(ctx context.Context, user *limen
 			}
 		}
 
-		if err := o.clearActiveOrganizationFromSessions(ctx, organization.ID); err != nil {
+		if err := o.clearActiveOrganizationFromSessions(ctx, organization.ID, nil); err != nil {
 			return err
 		}
 

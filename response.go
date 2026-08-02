@@ -68,7 +68,7 @@ func tryDeferRedirect(w http.ResponseWriter, redirectURL string, status int) boo
 	return true
 }
 
-func (rs Responder) JSON(w http.ResponseWriter, r *http.Request, status int, payload any) error {
+func (rs *Responder) JSON(w http.ResponseWriter, r *http.Request, status int, payload any) error {
 	if tryDeferResponse(w, status, payload, false) {
 		return nil
 	}
@@ -98,7 +98,7 @@ func (rs Responder) JSON(w http.ResponseWriter, r *http.Request, status int, pay
 	return json.NewEncoder(w).Encode(out)
 }
 
-func (rs Responder) Error(w http.ResponseWriter, r *http.Request, err error) error {
+func (rs *Responder) Error(w http.ResponseWriter, r *http.Request, err error) error {
 	ae := ToLimenError(err)
 	if tryDeferResponse(w, ae.Status(), ae, true) {
 		return nil
@@ -125,17 +125,15 @@ func (rs Responder) Error(w http.ResponseWriter, r *http.Request, err error) err
 	return json.NewEncoder(w).Encode(out)
 }
 
-func (rs Responder) SessionResponse(w http.ResponseWriter, r *http.Request, core *LimenCore, result *AuthenticationResult, sessionResult *SessionResult) error {
+func (rs *Responder) SessionResponse(w http.ResponseWriter, r *http.Request, core *LimenCore, result *AuthenticationResult, sessionResult *SessionResult) error {
 	// Store auth result for hooks to access
 	if rw, ok := w.(*responseWriter); ok {
 		rw.authResult = result
 	}
 
-	if err := rs.setSessionCookies(w, sessionResult); err != nil {
+	if err := rs.applySession(w, sessionResult); err != nil {
 		return rs.Error(w, r, err)
 	}
-
-	rs.setSessionHeaders(w, sessionResult)
 
 	if rs.sessionTransformer != nil {
 		rs.handleSessionTransformer(w, r, result, sessionResult)
@@ -147,7 +145,7 @@ func (rs Responder) SessionResponse(w http.ResponseWriter, r *http.Request, core
 	})
 }
 
-func (rs Responder) handleSessionTransformer(w http.ResponseWriter, r *http.Request, result *AuthenticationResult, sessionResult *SessionResult) {
+func (rs *Responder) handleSessionTransformer(w http.ResponseWriter, r *http.Request, result *AuthenticationResult, sessionResult *SessionResult) {
 	payload, err := rs.sessionTransformer(result.User.Raw(), sessionResult)
 	if err != nil {
 		rs.Error(w, r, err)
@@ -156,18 +154,40 @@ func (rs Responder) handleSessionTransformer(w http.ResponseWriter, r *http.Requ
 	rs.JSON(w, r, http.StatusOK, payload)
 }
 
+func (rs *Responder) JSONWithSession(w http.ResponseWriter, r *http.Request, status int, payload any, sessionResult *SessionResult) error {
+	if err := rs.applySession(w, sessionResult); err != nil {
+		return rs.Error(w, r, err)
+	}
+	return rs.JSON(w, r, status, payload)
+}
+
+func (rs *Responder) ErrorWithSession(w http.ResponseWriter, r *http.Request, err error, sessionResult *SessionResult) error {
+	if err := rs.applySession(w, sessionResult); err != nil {
+		return rs.Error(w, r, err)
+	}
+	return rs.Error(w, r, err)
+}
+
+func (rs *Responder) applySession(w http.ResponseWriter, sessionResult *SessionResult) error {
+	if err := rs.setSessionCookies(w, sessionResult); err != nil {
+		return err
+	}
+	rs.setSessionHeaders(w, sessionResult)
+	return nil
+}
+
 // SetHeader sets a response header
-func (rs Responder) SetHeader(w http.ResponseWriter, key, value string) {
+func (rs *Responder) SetHeader(w http.ResponseWriter, key, value string) {
 	w.Header().Set(key, value)
 }
 
 // AddHeader adds a response header (allows multiple values for same key)
-func (rs Responder) AddHeader(w http.ResponseWriter, key, value string) {
+func (rs *Responder) AddHeader(w http.ResponseWriter, key, value string) {
 	w.Header().Add(key, value)
 }
 
 // setSessionCookies sets the session cookie in the response.
-func (rs Responder) setSessionCookies(w http.ResponseWriter, sessionResult *SessionResult) error {
+func (rs *Responder) setSessionCookies(w http.ResponseWriter, sessionResult *SessionResult) error {
 	if sessionResult == nil {
 		return nil
 	}
@@ -175,7 +195,7 @@ func (rs Responder) setSessionCookies(w http.ResponseWriter, sessionResult *Sess
 	return rs.cookies.SetSessionCookie(w, sessionResult)
 }
 
-func (rs Responder) setSessionHeaders(w http.ResponseWriter, sessionResult *SessionResult) {
+func (rs *Responder) setSessionHeaders(w http.ResponseWriter, sessionResult *SessionResult) {
 	if sessionResult == nil {
 		return
 	}
@@ -200,7 +220,7 @@ func (rs Responder) setSessionHeaders(w http.ResponseWriter, sessionResult *Sess
 }
 
 // IssuedSessionToken returns the session token a response carries.
-func (rs Responder) IssuedSessionToken(h http.Header) string {
+func (rs *Responder) IssuedSessionToken(h http.Header) string {
 	if rs.cookies != nil && rs.cookies.base != nil {
 		if name := rs.cookies.base.sessionCookieName; name != "" {
 			if token := ExtractCookieValue(h, name); token != "" {
@@ -213,7 +233,7 @@ func (rs Responder) IssuedSessionToken(h http.Header) string {
 
 // ClearSessionResponse removes any pending session from this response so no
 // usable session is sent to the client.
-func (rs Responder) ClearSessionResponse(w http.ResponseWriter) {
+func (rs *Responder) ClearSessionResponse(w http.ResponseWriter) {
 	if rs.cookies != nil {
 		rs.cookies.ClearSessionResponse(w)
 	}
@@ -225,7 +245,7 @@ func (rs Responder) ClearSessionResponse(w http.ResponseWriter) {
 
 // appendExposeHeaders appends header names to Access-Control-Expose-Headers
 // without overwriting values already set by the user's CORS middleware.
-func (rs Responder) appendExposeHeaders(w http.ResponseWriter, headers ...string) {
+func (rs *Responder) appendExposeHeaders(w http.ResponseWriter, headers ...string) {
 	for _, header := range headers {
 		if header == "" {
 			continue
@@ -278,7 +298,7 @@ func removeExposeHeaders(h http.Header, names ...string) {
 
 // Redirect sends a redirect response. When the response is deferred (after-hooks in use),
 // the redirect is stored and sent after hooks run so the browser receives a proper 3xx.
-func (rs Responder) Redirect(w http.ResponseWriter, r *http.Request, redirectURL string, status int) {
+func (rs *Responder) Redirect(w http.ResponseWriter, r *http.Request, redirectURL string, status int) {
 	if tryDeferRedirect(w, redirectURL, status) {
 		return
 	}
@@ -287,7 +307,7 @@ func (rs Responder) Redirect(w http.ResponseWriter, r *http.Request, redirectURL
 
 // RedirectWithSession sets the session cookie and redirects the client to redirectURL.
 // Used by OAuth callbacks when redirect_uri is provided in the authorize request.
-func (rs Responder) RedirectWithSession(w http.ResponseWriter, r *http.Request, redirectURL string, sessionResult *SessionResult) {
+func (rs *Responder) RedirectWithSession(w http.ResponseWriter, r *http.Request, redirectURL string, sessionResult *SessionResult) {
 	if err := rs.setSessionCookies(w, sessionResult); err != nil {
 		rs.Error(w, r, err)
 		return

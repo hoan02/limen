@@ -8,44 +8,6 @@ import (
 	"github.com/thecodearcher/limen/access"
 )
 
-func (o *organizationPlugin) CreateMember(ctx context.Context, user *limen.User, organization *Organization, role any) (*Member, error) {
-	existing, err := o.core.Exists(ctx, o.memberSchema, []limen.Where{
-		limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
-		limen.Eq(o.memberSchema.GetUserIDField(), user.ID),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if existing {
-		return nil, ErrMemberAlreadyExists
-	}
-
-	var member *Member
-	resolvedRoles, err := o.resolveRoles(ctx, organization, []any{role})
-	if err != nil {
-		return nil, err
-	}
-	err = o.core.WithTransaction(ctx, func(ctx context.Context) error {
-		memberModel, err := o.core.CreateAndReturn(ctx, o.memberSchema, &Member{
-			OrganizationID: organization.ID,
-			UserID:         user.ID,
-		}, nil, MemberSchemaOrganizationIDField, MemberSchemaUserIDField)
-		if err != nil {
-			return err
-		}
-
-		member = memberModel.(*Member)
-		return o.assignMemberRole(ctx, member, resolvedRoles[0])
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return member, nil
-}
-
 func (o *organizationPlugin) AssignMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, roleToAssign any) error {
 	if err := o.HasPermission(ctx, user, organization.ID, perms("member:update")); err != nil {
 		return err
@@ -281,11 +243,16 @@ func (o *organizationPlugin) GetMemberWithRelations(ctx context.Context, user *l
 }
 
 func (o *organizationPlugin) ListMembers(ctx context.Context, user *limen.User, organizationID any, opts *limen.QueryOptions) (*limen.Page[*Member], error) {
-	if err := o.HasPermission(ctx, user, organizationID, perms("member:read")); err != nil {
+	organization, err := o.GetOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := o.HasPermission(ctx, user, organization.ID, perms("member:read")); err != nil {
 		return nil, err
 	}
 	members, err := o.core.FindWithOptions(ctx, o.memberSchema, []limen.Where{
-		limen.Eq(o.memberSchema.GetOrganizationIDField(), organizationID),
+		limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
 	}, opts)
 	if err != nil {
 		return nil, err
@@ -449,6 +416,44 @@ func (o *organizationPlugin) validateOwnerRoleCanBeRemoved(ctx context.Context, 
 	return nil
 }
 
+func (o *organizationPlugin) createMemberAndAssignRole(ctx context.Context, user *limen.User, organization *Organization, role any) (*Member, error) {
+	existing, err := o.core.Exists(ctx, o.memberSchema, []limen.Where{
+		limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
+		limen.Eq(o.memberSchema.GetUserIDField(), user.ID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if existing {
+		return nil, ErrMemberAlreadyExists
+	}
+
+	var member *Member
+	resolvedRoles, err := o.resolveRoles(ctx, organization, []any{role})
+	if err != nil {
+		return nil, err
+	}
+	err = o.core.WithTransaction(ctx, func(ctx context.Context) error {
+		memberModel, err := o.core.CreateAndReturn(ctx, o.memberSchema, &Member{
+			OrganizationID: organization.ID,
+			UserID:         user.ID,
+		}, nil, MemberSchemaOrganizationIDField, MemberSchemaUserIDField)
+		if err != nil {
+			return err
+		}
+
+		member = memberModel.(*Member)
+		return o.assignMemberRole(ctx, member, resolvedRoles[0])
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return member, nil
+}
+
 func (o *organizationPlugin) deleteMember(ctx context.Context, organization *Organization, member *Member) error {
 	return o.core.WithTransaction(ctx, func(ctx context.Context) error {
 		if err := o.core.Delete(ctx, o.memberRoleSchema, []limen.Where{
@@ -465,8 +470,8 @@ func (o *organizationPlugin) deleteMember(ctx context.Context, organization *Org
 			return err
 		}
 
-		return o.clearActiveOrganizationFromSessions(ctx, organization.ID,
-			limen.Eq(o.sessionSchema.GetUserIDField(), member.UserID),
-		)
+		return o.clearActiveOrganizationFromSessions(ctx, organization.ID, map[limen.SchemaField]any{
+			limen.SessionSchemaUserIDField: member.UserID,
+		})
 	})
 }

@@ -8,56 +8,68 @@ import (
 	"github.com/thecodearcher/limen/access"
 )
 
-// SwitchOrganization sets the session's active organization after verifying membership.
-// Pass a nil organizationIdentifier to clear the active organization.
-// Use this for user-initiated org switches; when membership is already known, use SetActiveOrganization instead.
-func (o *organizationPlugin) SwitchOrganization(ctx context.Context, session *limen.Session, organizationIdentifier any) (*Organization, error) {
+func (o *organizationPlugin) SwitchOrganization(ctx context.Context, session *limen.Session, organizationIdentifier any) (*Organization, *limen.SessionResult, error) {
 	if organizationIdentifier == nil {
-		if err := o.SetActiveOrganization(ctx, session, nil); err != nil {
-			return nil, err
+		result, err := o.SetActiveOrganization(ctx, session, nil)
+		if err != nil {
+			return nil, nil, err
 		}
-		return nil, nil
+		return nil, result, nil
 	}
 
 	organization, err := o.GetOrganization(ctx, organizationIdentifier)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := o.CheckMemberExistsInOrganization(ctx, organization.ID, session.UserID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if err := o.SetActiveOrganization(ctx, session, organization.ID); err != nil {
-		return nil, err
+	result, err := o.SetActiveOrganization(ctx, session, organization)
+	if err != nil {
+		return nil, nil, err
 	}
-	return organization, nil
+	return organization, result, nil
 }
 
-// SetActiveOrganization sets active_organization_id on the session without checking membership.
-// Pass nil to clear the active organization.
-// Use when membership is already guaranteed, for example, right after creating an organization.
-// For user-initiated switches, use SwitchOrganization instead.
-func (o *organizationPlugin) SetActiveOrganization(ctx context.Context, session *limen.Session, organizationID any) error {
-	return o.core.DBAction.UpdateSession(ctx, map[limen.SchemaField]any{
-		SessionSchemaActiveOrganizationIDField: organizationID,
-	}, []limen.Where{
-		limen.Eq(o.sessionSchema.GetIDField(), session.ID),
+func (o *organizationPlugin) SetActiveOrganization(ctx context.Context, session *limen.Session, organization *Organization) (*limen.SessionResult, error) {
+	var value any
+	if organization != nil {
+		value = o.sessionOrganizationID(organization)
+	}
+	return o.core.SessionManager.UpdateSession(ctx, session, map[limen.SchemaField]any{
+		SessionSchemaActiveOrganizationIDField: value,
 	})
 }
 
-func (o *organizationPlugin) GetActiveOrganizationID(session *limen.Session) any {
-	return session.Raw()[o.sessionSchema.GetActiveOrganizationIDField()]
+// sessionOrganizationID pairs the stored organization ID with its client-safe
+// form so client-visible session backends never carry the internal ID.
+func (o *organizationPlugin) sessionOrganizationID(organization *Organization) limen.SessionValue {
+	value := limen.SessionValue{Internal: organization.ID, Client: organization.ID}
+	if encoded, ok := o.core.EncodePublicID(o.organizationSchema, organization); ok {
+		value.Client = encoded
+	}
+	return value
 }
 
-func (o *organizationPlugin) clearActiveOrganizationFromSessions(ctx context.Context, organizationID any, extraConditions ...limen.Where) error {
-	conditions := append([]limen.Where{
-		limen.Eq(o.sessionSchema.GetActiveOrganizationIDField(), organizationID),
-	}, extraConditions...)
+func (o *organizationPlugin) GetActiveOrganizationID(ctx context.Context, session *limen.Session) (any, error) {
+	value, err := o.core.SessionManager.GetSessionData(ctx, session, SessionSchemaActiveOrganizationIDField)
+	if err != nil {
+		return nil, err
+	}
+	return o.core.Schema.NormalizeIDValue(value), nil
+}
 
-	return o.core.DBAction.UpdateSession(ctx, map[limen.SchemaField]any{
+func (o *organizationPlugin) clearActiveOrganizationFromSessions(ctx context.Context, organizationID any, match map[limen.SchemaField]any) error {
+	if match == nil {
+		match = make(map[limen.SchemaField]any, 1)
+	}
+	match[SessionSchemaActiveOrganizationIDField] = organizationID
+
+	return o.core.SessionManager.UpdateSessions(ctx, map[limen.SchemaField]any{
 		SessionSchemaActiveOrganizationIDField: nil,
-	}, conditions)
+	}, match)
 }
 
 func (o *organizationPlugin) HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error {

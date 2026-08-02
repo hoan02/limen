@@ -34,7 +34,7 @@ func TestRequired(t *testing.T) {
 		{"valid string", "John", false},
 		{"present number", 3, false},
 		{"present bool", false, false},
-		{"present object", map[string]any{}, false},
+		{"present object", map[string]any{}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

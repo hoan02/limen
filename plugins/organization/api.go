@@ -16,7 +16,6 @@ type API interface {
 	LeaveOrganization(ctx context.Context, user *limen.User, organizationID any) error
 	CheckSlugAvailability(ctx context.Context, slug string) (bool, error)
 
-	CreateMember(ctx context.Context, user *limen.User, organization *Organization, role any) (*Member, error)
 	GetMemberByUserID(ctx context.Context, organizationID, userID any) (*Member, error)
 	GetMemberByID(ctx context.Context, organization *Organization, memberID any) (*Member, error)
 	GetMemberWithRelations(ctx context.Context, user *limen.User, organizationID any) (*Member, error)
@@ -45,11 +44,14 @@ type API interface {
 
 	// SwitchOrganization sets the active organization after verifying membership.
 	// Pass nil to clear the active organization.
+	// A non-nil SessionResult carries a re-issued session token that must be delivered to the client.
 	// Prefer this for user-initiated switches; use SetActiveOrganization when membership is already known.
-	SwitchOrganization(ctx context.Context, session *limen.Session, organizationIdentifier any) (*Organization, error)
-	// SetActiveOrganization sets active_organization_id without a membership check.
+	SwitchOrganization(ctx context.Context, session *limen.Session, organizationIdentifier any) (*Organization, *limen.SessionResult, error)
+	// SetActiveOrganization sets the active organization without a membership check.
 	// Pass nil to clear the active organization.
-	SetActiveOrganization(ctx context.Context, session *limen.Session, organizationID any) error
+	// A non-nil SessionResult carries a re-issued session token that must be delivered to the client.
+	SetActiveOrganization(ctx context.Context, session *limen.Session, organization *Organization) (*limen.SessionResult, error)
+	GetActiveOrganizationID(ctx context.Context, session *limen.Session) (any, error)
 
 	HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error
 }

@@ -132,7 +132,7 @@ func (p *credentialPasswordPlugin) SetPassword(ctx context.Context, user *limen.
 			return err
 		}
 		if revokeOtherSessions {
-			return p.dbAction.DeleteSessionByUserID(ctx, user.ID)
+			return p.core.SessionManager.RevokeAllSessions(ctx, user.ID)
 		}
 		return nil
 	})
@@ -167,7 +167,7 @@ func (p *credentialPasswordPlugin) UpdatePassword(ctx context.Context, user *lim
 			return err
 		}
 		if revokeOtherSessions {
-			return p.dbAction.DeleteSessionByUserID(ctx, user.ID)
+			return p.core.SessionManager.RevokeAllSessions(ctx, user.ID)
 		}
 		return nil
 	})

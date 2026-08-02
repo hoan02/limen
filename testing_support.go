@@ -406,10 +406,18 @@ func testSortRows(rows []map[string]any, orderBy []OrderBy) {
 // adapter.
 func NewTestLimen(t *testing.T, plugins ...Plugin) (*Limen, *LimenCore) {
 	t.Helper()
+	return NewTestLimenWithSchema(t, nil, plugins...)
+}
+
+// NewTestLimenWithSchema is NewTestLimen with a custom schema configuration,
+// for tests that need schema-level features such as public IDs.
+func NewTestLimenWithSchema(t *testing.T, schema *SchemaConfig, plugins ...Plugin) (*Limen, *LimenCore) {
+	t.Helper()
 
 	l, err := New(&Config{
 		BaseURL:  "http://localhost:8080",
 		Database: newTestMemoryAdapter(t),
+		Schema:   schema,
 		Secret:   testSecret,
 		Plugins:  plugins,
 	})

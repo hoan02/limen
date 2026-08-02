@@ -108,13 +108,14 @@ func TestSetPassword_RevokeSessions(t *testing.T) {
 
 	l, plugin := newTestLimenAndPlugin(t)
 	user := seedOAuthTestUser(t, plugin, "revoke-set@test.com")
-	session := limen.SeedTestSession(t, l, user.ID, user.Email)
+	limen.SeedTestSession(t, l, user.ID, user.Email)
 
 	err := plugin.SetPassword(context.Background(), user, "NewPassword1", true)
 	require.NoError(t, err)
 
-	_, err = plugin.dbAction.FindSessionByToken(context.Background(), session.Token)
-	assert.ErrorIs(t, err, limen.ErrRecordNotFound)
+	sessions, err := plugin.core.SessionManager.ListSessions(context.Background(), user.ID)
+	require.NoError(t, err)
+	assert.Empty(t, sessions)
 
 	result, err := plugin.SignInWithCredentialAndPassword(context.Background(), "revoke-set@test.com", "NewPassword1")
 	require.NoError(t, err)
@@ -164,13 +165,14 @@ func TestUpdatePassword_RevokeSessions(t *testing.T) {
 
 	l, plugin := newTestLimenAndPlugin(t)
 	user := seedTestUser(t, plugin, "revoke-upd@test.com", "OldPassword1")
-	session := limen.SeedTestSession(t, l, user.ID, user.Email)
+	limen.SeedTestSession(t, l, user.ID, user.Email)
 
 	err := plugin.UpdatePassword(context.Background(), user, "OldPassword1", "NewPassword1", true)
 	require.NoError(t, err)
 
-	_, err = plugin.dbAction.FindSessionByToken(context.Background(), session.Token)
-	assert.ErrorIs(t, err, limen.ErrRecordNotFound)
+	sessions, err := plugin.core.SessionManager.ListSessions(context.Background(), user.ID)
+	require.NoError(t, err)
+	assert.Empty(t, sessions)
 
 	result, err := plugin.SignInWithCredentialAndPassword(context.Background(), "revoke-upd@test.com", "NewPassword1")
 	require.NoError(t, err)

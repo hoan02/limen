@@ -85,13 +85,14 @@ func (h *organizationHandlers) CreateOrganization(w http.ResponseWriter, r *http
 		return
 	}
 
-	if err := h.plugin.SetActiveOrganization(r.Context(), session.Session, organization.ID); err != nil {
+	sessionResult, err := h.plugin.SetActiveOrganization(r.Context(), session.Session, organization)
+	if err != nil {
 		h.responder.Error(w, r, err)
 		return
 	}
 
 	h.responder.AddHeader(w, HeaderActiveOrganizationID, h.plugin.clientOrganizationID(organization))
-	h.responder.JSON(w, r, http.StatusCreated, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization))
+	h.responder.JSONWithSession(w, r, http.StatusCreated, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization), sessionResult)
 }
 
 func (h *organizationHandlers) UpdateOrganization(w http.ResponseWriter, r *http.Request) {
@@ -253,19 +254,19 @@ func (h *organizationHandlers) SwitchOrganization(w http.ResponseWriter, r *http
 		return
 	}
 
-	organization, err := h.plugin.SwitchOrganization(r.Context(), session.Session, body["organization"])
+	organization, sessionResult, err := h.plugin.SwitchOrganization(r.Context(), session.Session, body["organization"])
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
 	}
 
 	if organization == nil {
-		h.responder.JSON(w, r, http.StatusOK, nil)
+		h.responder.JSONWithSession(w, r, http.StatusOK, nil, sessionResult)
 		return
 	}
 
 	h.responder.AddHeader(w, HeaderActiveOrganizationID, h.plugin.clientOrganizationID(organization))
-	h.responder.JSON(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization))
+	h.responder.JSONWithSession(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization), sessionResult)
 }
 
 func (h *organizationHandlers) InviteMember(w http.ResponseWriter, r *http.Request) {

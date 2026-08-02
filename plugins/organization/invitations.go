@@ -202,7 +202,7 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		}
 
 		if status == InvitationStatusAccepted {
-			_, err := o.CreateMember(ctx, user, organization, invitation.Roles[0])
+			_, err := o.createMemberAndAssignRole(ctx, user, organization, invitation.Roles[0])
 			return err
 		}
 
@@ -337,7 +337,7 @@ func (o *organizationPlugin) distinctRoleIdentifiers(invitations []*Invitation) 
 	seen := make(map[any]struct{})
 	for _, invitation := range invitations {
 		for _, identifier := range invitation.Roles {
-			normalized := o.normalizeRoleIdentifier(identifier)
+			normalized := o.core.Schema.NormalizeIDValue(identifier)
 			if _, ok := seen[normalized]; ok {
 				continue
 			}
@@ -351,7 +351,7 @@ func (o *organizationPlugin) distinctRoleIdentifiers(invitations []*Invitation) 
 func (o *organizationPlugin) rolesForInvitation(invitation *Invitation, rolesByID map[any]*access.Role) []*access.Role {
 	roles := make([]*access.Role, 0, len(invitation.Roles))
 	for _, identifier := range invitation.Roles {
-		if role := rolesByID[o.normalizeRoleIdentifier(identifier)]; role != nil {
+		if role := rolesByID[o.core.Schema.NormalizeIDValue(identifier)]; role != nil {
 			roles = append(roles, role)
 		}
 	}

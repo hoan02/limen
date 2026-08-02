@@ -45,6 +45,25 @@ type SessionManager interface {
 	RevokeSession(ctx context.Context, token string) error
 	RevokeAllSessions(ctx context.Context, userID any) error
 	ListSessions(ctx context.Context, userID any) ([]Session, error)
+
+	// GetSessionData returns the value stored on the session under the logical field.
+	GetSessionData(ctx context.Context, session *Session, field SchemaField) (any, error)
+	// UpdateSession persists the fields; the live session reflects the new state on
+	// return. A non-nil SessionResult carries a re-issued token that must be
+	// delivered to the client; nil means the current token stays valid.
+	UpdateSession(ctx context.Context, session *Session, data map[SchemaField]any) (*SessionResult, error)
+	// UpdateSessions persists the fields on every session whose stored values equal
+	// match, where the backing store supports it — see SessionBulkUpdater.
+	UpdateSessions(ctx context.Context, data map[SchemaField]any, match map[SchemaField]any) error
+}
+
+// SessionValue carries both representations of a session-data value so each
+// session manager stores the one matching its exposure: Internal goes to
+// server-side storage, Client to client-readable tokens. Plain (unwrapped)
+// values are stored as-is by every manager.
+type SessionValue struct {
+	Internal any
+	Client   any
 }
 
 // ValidatedSession is the result of a session validation.
@@ -75,10 +94,19 @@ type SessionResult struct {
 // SessionStore defines the interface for session storage backends.
 type SessionStore interface {
 	Get(ctx context.Context, token string) (*Session, error)
-	Set(ctx context.Context, session *Session) error
+	// Set persists session state, upserted by token. It accepts a *Session or a
+	// map[SchemaField]any row subset, which must include SessionSchemaTokenField.
+	Set(ctx context.Context, data any) error
 	Delete(ctx context.Context, token string) error
 	DeleteByUserID(ctx context.Context, userID any) error
 	ListByUserID(ctx context.Context, userID any) ([]Session, error)
+}
+
+// SessionBulkUpdater is an optional SessionStore capability for updating every
+// session whose stored values equal match. Stores without it treat bulk updates
+// as a no-op; consumers must not rely on session data for revocation.
+type SessionBulkUpdater interface {
+	UpdateSessions(ctx context.Context, data map[SchemaField]any, match map[SchemaField]any) error
 }
 
 // RateLimiterStore defines the interface for rate-limit storage backends.

@@ -16,42 +16,68 @@ import (
 // User without hitting the database.
 type LimenClaims struct {
 	jwt.RegisteredClaims
-	Email         string         `json:"email,omitempty"`
-	EmailVerified bool           `json:"email_verified,omitempty"`
-	Custom        map[string]any `json:"custom,omitempty"`
+	Email           string         `json:"email,omitempty"`
+	EmailVerifiedAt *time.Time     `json:"email_verified_at,omitempty"`
+	Custom          map[string]any `json:"custom,omitempty"`
+	Session         map[string]any `json:"session,omitempty"`
 }
 
-func (p *sessionJWTPlugin) GenerateAccessToken(user *limen.User) (string, string, error) {
-	now := time.Now()
-	expiresAt := now.Add(p.config.accessTokenDuration)
-	jti := generateJTI()
-
+func (p *sessionJWTPlugin) GenerateAccessToken(user *limen.User, sessionData map[string]any) (string, string, error) {
 	claims := LimenClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   p.config.subjectEncoder(user),
-			ID:        jti,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(expiresAt),
-			Issuer:    p.config.issuer,
-			Audience:  jwt.ClaimStrings(p.config.audience),
-		},
+		RegisteredClaims: p.newRegisteredClaims(),
+		Session:          sessionData,
 	}
+	claims.Subject = p.config.subjectEncoder(user)
 
 	if !p.config.refreshUser {
 		claims.Email = user.Email
-		claims.EmailVerified = user.EmailVerifiedAt != nil
+		claims.EmailVerifiedAt = user.EmailVerifiedAt
 	}
 
 	if p.config.customClaims != nil {
 		claims.Custom = p.config.customClaims(user)
 	}
 
+	return p.signClaims(claims)
+}
+
+// reissueAccessToken mints a fresh token carrying the prior token's identity
+// claims with the given session data.
+func (p *sessionJWTPlugin) reissueAccessToken(prior *LimenClaims, sessionData map[string]any) (string, *LimenClaims, error) {
+	claims := LimenClaims{
+		RegisteredClaims: p.newRegisteredClaims(),
+		Email:            prior.Email,
+		EmailVerifiedAt:  prior.EmailVerifiedAt,
+		Custom:           prior.Custom,
+		Session:          sessionData,
+	}
+	claims.Subject = prior.Subject
+
+	signed, _, err := p.signClaims(claims)
+	if err != nil {
+		return "", nil, err
+	}
+	return signed, &claims, nil
+}
+
+func (p *sessionJWTPlugin) newRegisteredClaims() jwt.RegisteredClaims {
+	now := time.Now()
+	return jwt.RegisteredClaims{
+		ID:        generateJTI(),
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(p.config.accessTokenDuration)),
+		Issuer:    p.config.issuer,
+		Audience:  jwt.ClaimStrings(p.config.audience),
+	}
+}
+
+func (p *sessionJWTPlugin) signClaims(claims LimenClaims) (string, string, error) {
 	token := jwt.NewWithClaims(p.config.signingMethod, claims)
 	signed, err := token.SignedString(p.config.signingKey)
 	if err != nil {
 		return "", "", fmt.Errorf("session-jwt: failed to sign token: %w", err)
 	}
-	return signed, jti, nil
+	return signed, claims.ID, nil
 }
 
 func (p *sessionJWTPlugin) VerifyAccessToken(tokenString string) (*LimenClaims, error) {
@@ -114,7 +140,7 @@ func (p *sessionJWTPlugin) performRefresh(ctx context.Context, rawRefreshToken s
 		return nil, nil, fmt.Errorf("session-jwt: user not found: %w", err)
 	}
 
-	signed, jti, err := p.GenerateAccessToken(user)
+	signed, jti, err := p.GenerateAccessToken(user, rt.SessionData)
 	if err != nil {
 		return nil, nil, err
 	}

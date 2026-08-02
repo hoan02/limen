@@ -20,7 +20,6 @@ type organizationPlugin struct {
 	memberRoleSchema       *memberRoleSchema
 	organizationRoleSchema *organizationRoleSchema
 	invitationSchema       *invitationSchema
-	sessionSchema          *sessionSchema
 	hooks                  *Hooks
 	responder              *limen.Responder
 }
@@ -56,7 +55,6 @@ func (p *organizationPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.Sche
 	p.memberRoleSchema = newMemberRoleSchema(p.config.customRolesEnabled)
 	p.organizationRoleSchema = newOrganizationRoleSchema()
 	p.invitationSchema = newInvitationSchema(p)
-	p.sessionSchema = &sessionSchema{SessionSchema: schema.Session}
 
 	schemas := []limen.SchemaIntrospector{
 		buildOrganizationTableDef(schema, p.organizationSchema),

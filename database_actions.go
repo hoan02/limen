@@ -154,60 +154,6 @@ func (h *DatabaseActionHelper) UpdateVerification(ctx context.Context, updatedVe
 	return h.core.Update(ctx, verificationSchema, updatedVerification, conditions)
 }
 
-func (h *DatabaseActionHelper) CreateSession(ctx context.Context, data *Session, additionalFields map[string]any) error {
-	if err := h.core.Create(ctx, h.core.Schema.Session, data, additionalFields); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (h *DatabaseActionHelper) UpdateSession(ctx context.Context, data any, conditions []Where) error {
-	if err := h.core.Update(ctx, h.core.Schema.Session, data, conditions); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (h *DatabaseActionHelper) FindSessionByToken(ctx context.Context, sessionToken string) (*Session, error) {
-	sessionSchema := h.core.Schema.Session
-	session, err := h.core.FindOne(ctx, sessionSchema, []Where{
-		Eq(sessionSchema.GetTokenField(), sessionToken),
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	return session.(*Session), nil
-}
-
-func (h *DatabaseActionHelper) DeleteSessionByToken(ctx context.Context, sessionToken string) error {
-	sessionSchema := h.core.Schema.Session
-	return h.core.Delete(ctx, sessionSchema, []Where{
-		Eq(sessionSchema.GetTokenField(), sessionToken),
-	})
-}
-
-func (h *DatabaseActionHelper) DeleteSessionByUserID(ctx context.Context, userID any) error {
-	sessionSchema := h.core.Schema.Session
-	return h.core.Delete(ctx, sessionSchema, []Where{
-		Eq(sessionSchema.GetUserIDField(), userID),
-	})
-}
-
-func (h *DatabaseActionHelper) ListSessionsByUserID(ctx context.Context, userID any) ([]Session, error) {
-	sessionSchema := h.core.Schema.Session
-	models, err := h.core.FindMany(ctx, sessionSchema, []Where{
-		Eq(sessionSchema.GetUserIDField(), userID),
-	})
-	if err != nil {
-		return nil, err
-	}
-	sessions := make([]Session, 0, len(models))
-	for _, m := range models {
-		sessions = append(sessions, *m.(*Session))
-	}
-	return sessions, nil
-}
-
 func (h *DatabaseActionHelper) FindAccountByProviderAndProviderID(ctx context.Context, provider string, providerAccountID any) (*Account, error) {
 	raw, err := h.core.FindOne(ctx, h.core.Schema.Account, []Where{
 		Eq(h.core.Schema.Account.GetProviderField(), provider),
