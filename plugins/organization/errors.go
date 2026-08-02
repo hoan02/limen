@@ -24,9 +24,10 @@ var (
 
 	ErrUserCannotInviteOwner = limen.NewLimenError("You cannot invite the owner role. Only existing owners can invite a new owner.", http.StatusForbidden, nil)
 
-	ErrInvitationAlreadyExists = limen.NewLimenError("Invitation already exists", http.StatusConflict, nil)
-	ErrInvitationEmailMismatch = limen.NewLimenError("This invitation was sent to a different email address", http.StatusForbidden, nil)
-	ErrInvalidInvitation       = limen.NewLimenError("This invitation is no longer valid", http.StatusForbidden, nil)
+	ErrInvitationAlreadyExists   = limen.NewLimenError("Invitation already exists", http.StatusConflict, nil)
+	ErrInvitationEmailMismatch   = limen.NewLimenError("This invitation was sent to a different email address", http.StatusForbidden, nil)
+	ErrInvalidInvitation         = limen.NewLimenError("This invitation is no longer valid", http.StatusForbidden, nil)
+	ErrInvalidInvitationResponse = limen.NewLimenError("Invalid invitation response", http.StatusBadRequest, nil)
 
 	ErrUserAlreadyInOrganization        = limen.NewLimenError("This email address is already in use in this organization", http.StatusConflict, nil)
 	ErrMaxMembersPerOrganizationReached = limen.NewLimenError("The organization has reached the maximum number of members", http.StatusForbidden, nil)

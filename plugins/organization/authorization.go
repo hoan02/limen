@@ -3,10 +3,17 @@ package organization
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/thecodearcher/limen"
 	"github.com/thecodearcher/limen/access"
 )
+
+// memberAccess is a single load of a member's resolved roles and permission union.
+type memberAccess struct {
+	roles       []*access.Role
+	permissions access.Permissions
+}
 
 func (o *organizationPlugin) SwitchOrganization(ctx context.Context, session *limen.Session, organizationIdentifier any) (*Organization, *limen.SessionResult, error) {
 	if organizationIdentifier == nil {
@@ -72,66 +79,64 @@ func (o *organizationPlugin) clearActiveOrganizationFromSessions(ctx context.Con
 	}, match)
 }
 
-func (o *organizationPlugin) HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error {
-	userPermissions, err := o.GetMemberPermissions(ctx, organizationID, user)
-	if err != nil {
-		return err
-	}
-
-	if !access.HasRequiredPermissions(userPermissions, permissions) {
+func (a memberAccess) requirePermissions(required access.Permissions) error {
+	if !access.HasRequiredPermissions(a.permissions, required) {
 		return ErrInsufficientPermission
 	}
 	return nil
 }
 
+func (a memberAccess) requireGrantable(required access.Permissions) error {
+	if !access.HasRequiredPermissions(a.permissions, required) {
+		return ErrRolePermissionsExceedGranted
+	}
+	return nil
+}
+
+func (o *organizationPlugin) actorHasOwnerRole(actor memberAccess) bool {
+	return slices.ContainsFunc(actor.roles, o.isOwnerRole)
+}
+
+// loadMemberAccess fetches the user's membership roles once and derives permissions from them.
+func (o *organizationPlugin) loadMemberAccess(ctx context.Context, organizationID, userID any) (memberAccess, error) {
+	member, err := o.GetMemberByUserID(ctx, organizationID, userID)
+	if err != nil {
+		if errors.Is(err, limen.ErrRecordNotFound) {
+			return memberAccess{}, ErrMemberNotInOrganization
+		}
+		return memberAccess{}, err
+	}
+
+	roles, err := o.GetMemberRoles(ctx, member.ID)
+	if err != nil {
+		return memberAccess{}, err
+	}
+
+	permissions := make(access.Permissions)
+	for _, role := range roles {
+		permissions = access.MergePermissions(permissions, role.Permissions())
+	}
+
+	return memberAccess{roles: roles, permissions: permissions}, nil
+}
+
+func (o *organizationPlugin) HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error {
+	actor, err := o.loadMemberAccess(ctx, organizationID, user.ID)
+	if err != nil {
+		return err
+	}
+
+	return actor.requirePermissions(permissions)
+}
+
 // GetMemberPermissions returns the union of every permission the user holds in the organization,
 // across both configured roles and organization-defined roles.
 func (o *organizationPlugin) GetMemberPermissions(ctx context.Context, organizationID any, user *limen.User) (access.Permissions, error) {
-	member, err := o.GetMemberByUserID(ctx, organizationID, user.ID)
-	if err != nil {
-		if errors.Is(err, limen.ErrRecordNotFound) {
-			return nil, ErrMemberNotInOrganization
-		}
-		return nil, err
-	}
-
-	roles, err := o.core.FindMany(ctx, o.memberRoleSchema, []limen.Where{
-		limen.Eq(o.memberRoleSchema.GetMemberIDField(), member.ID),
-	})
+	actor, err := o.loadMemberAccess(ctx, organizationID, user.ID)
 	if err != nil {
 		return nil, err
 	}
-
-	memberRoles := limen.MapToSliceOfType[*MemberRole](roles)
-
-	userPermissions := make(access.Permissions)
-	dynamicMemberRoles := make([]*MemberRole, 0)
-	for _, memberRole := range memberRoles {
-		if memberRole.OrganizationRoleID != nil {
-			dynamicMemberRoles = append(dynamicMemberRoles, memberRole)
-			continue
-		}
-		role, err := o.resolveMemberStaticRole(memberRole)
-		if err != nil {
-			return nil, err
-		}
-		userPermissions = access.MergePermissions(userPermissions, role.Permissions())
-	}
-
-	if len(dynamicMemberRoles) == 0 {
-		return userPermissions, nil
-	}
-
-	dynamicRoles, err := o.resolveMemberDynamicRoles(ctx, dynamicMemberRoles)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, role := range dynamicRoles {
-		userPermissions = access.MergePermissions(userPermissions, role.Permissions())
-	}
-
-	return userPermissions, nil
+	return actor.permissions, nil
 }
 
 func (o *organizationPlugin) CheckMemberExistsInOrganization(ctx context.Context, organizationID, userID any) error {

@@ -13,7 +13,11 @@ import (
 )
 
 func (o *organizationPlugin) CreateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, req *CreateOrganizationRoleRequest) (*OrganizationRole, error) {
-	if err := o.HasPermission(ctx, user, organization.ID, perms("role:create")); err != nil {
+	actor, err := o.loadMemberAccess(ctx, organization.ID, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := actor.requirePermissions(perms("role:create")); err != nil {
 		return nil, err
 	}
 
@@ -30,7 +34,7 @@ func (o *organizationPlugin) CreateOrganizationRole(ctx context.Context, user *l
 		return nil, err
 	}
 
-	if err := o.validateGrantablePermissions(ctx, user, organization, req.Name, access.Permissions(req.Permissions)); err != nil {
+	if err := o.validateGrantablePermissions(actor, req.Name, access.Permissions(req.Permissions)); err != nil {
 		return nil, err
 	}
 
@@ -58,7 +62,11 @@ func (o *organizationPlugin) CreateOrganizationRole(ctx context.Context, user *l
 }
 
 func (o *organizationPlugin) UpdateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any, req *UpdateOrganizationRoleRequest) (*OrganizationRole, error) {
-	if err := o.HasPermission(ctx, user, organization.ID, perms("role:update")); err != nil {
+	actor, err := o.loadMemberAccess(ctx, organization.ID, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := actor.requirePermissions(perms("role:update")); err != nil {
 		return nil, err
 	}
 
@@ -68,7 +76,7 @@ func (o *organizationPlugin) UpdateOrganizationRole(ctx context.Context, user *l
 	}
 
 	if req.Permissions != nil {
-		if err := o.validateGrantablePermissions(ctx, user, organization, role.Name, access.Permissions(req.Permissions)); err != nil {
+		if err := o.validateGrantablePermissions(actor, role.Name, access.Permissions(req.Permissions)); err != nil {
 			return nil, err
 		}
 	}
@@ -254,7 +262,7 @@ func (o *organizationPlugin) isReservedRoleName(name string) bool {
 	})
 }
 
-func (o *organizationPlugin) validateGrantablePermissions(ctx context.Context, user *limen.User, organization *Organization, name string, permissions access.Permissions) error {
+func (o *organizationPlugin) validateGrantablePermissions(actor memberAccess, name string, permissions access.Permissions) error {
 	if len(permissions) == 0 {
 		return ErrRolePermissionsCannotBeEmpty
 	}
@@ -263,13 +271,21 @@ func (o *organizationPlugin) validateGrantablePermissions(ctx context.Context, u
 		return limen.NewLimenError(err.Error(), http.StatusBadRequest, nil)
 	}
 
-	grantable, err := o.GetMemberPermissions(ctx, organization.ID, user)
-	if err != nil {
+	return actor.requireGrantable(permissions)
+}
+
+// ensureCanGrantRoles verifies the actor may assign/invite the given roles:
+// special-role gates (e.g. owner) plus a permission-subset check so actors
+// cannot grant permissions they do not hold.
+func (o *organizationPlugin) ensureCanGrantRoles(actor memberAccess, roles []*access.Role) error {
+	if err := o.ensureCanActOnSpecialRoles(actor, roles); err != nil {
 		return err
 	}
 
-	if !access.HasRequiredPermissions(grantable, permissions) {
-		return ErrRolePermissionsExceedGranted
+	for _, role := range roles {
+		if err := actor.requireGrantable(role.Permissions()); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -350,31 +366,23 @@ func (o *organizationPlugin) resolveDynamicRolesByID(ctx context.Context, member
 	return dynamicRolesByID, nil
 }
 
-func (o *organizationPlugin) resolveMemberDynamicRoles(ctx context.Context, memberRoles []*MemberRole) ([]*access.Role, error) {
-	dynamicRolesByID, err := o.resolveDynamicRolesByID(ctx, memberRoles)
-	if err != nil {
-		return nil, err
-	}
-	dynamicRoles := make([]*access.Role, 0, len(dynamicRolesByID))
-	for _, role := range dynamicRolesByID {
-		dynamicRoles = append(dynamicRoles, role)
-	}
-	return dynamicRoles, nil
-}
-
-func (o *organizationPlugin) composeMemberRoles(memberRoles []*MemberRole, dynamicRolesByID map[any]*access.Role) []*access.Role {
-	var resolved []*access.Role
+func (o *organizationPlugin) composeMemberRoles(memberRoles []*MemberRole, dynamicRolesByID map[any]*access.Role) ([]*access.Role, error) {
+	resolved := make([]*access.Role, 0, len(memberRoles))
 	for _, memberRole := range memberRoles {
-		if memberRole.OrganizationRoleID != nil && dynamicRolesByID[memberRole.OrganizationRoleID] != nil {
-			resolved = append(resolved, dynamicRolesByID[memberRole.OrganizationRoleID])
+		if memberRole.OrganizationRoleID != nil {
+			if role := dynamicRolesByID[memberRole.OrganizationRoleID]; role != nil {
+				resolved = append(resolved, role)
+			}
 			continue
 		}
 
-		if role, err := o.resolveMemberStaticRole(memberRole); err == nil {
-			resolved = append(resolved, role)
+		role, err := o.resolveMemberStaticRole(memberRole)
+		if err != nil {
+			return nil, err
 		}
+		resolved = append(resolved, role)
 	}
-	return resolved
+	return resolved, nil
 }
 
 func (o *organizationPlugin) resolveRoles(ctx context.Context, organization *Organization, roles []any) ([]*access.Role, error) {
@@ -432,4 +440,13 @@ func roleKey(role *access.Role) any {
 		return id
 	}
 	return role.Name()
+}
+
+func (o *organizationPlugin) ensureCanActOnSpecialRoles(actor memberAccess, actedOnRoles []*access.Role) error {
+	for _, role := range actedOnRoles {
+		if o.isOwnerRole(role) && !o.actorHasOwnerRole(actor) {
+			return ErrUserCannotManageOwnerRole
+		}
+	}
+	return nil
 }

@@ -9,7 +9,11 @@ import (
 )
 
 func (o *organizationPlugin) AssignMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, roleToAssign any) error {
-	if err := o.HasPermission(ctx, user, organization.ID, perms("member:update")); err != nil {
+	actor, err := o.loadMemberAccess(ctx, organization.ID, user.ID)
+	if err != nil {
+		return err
+	}
+	if err := actor.requirePermissions(perms("member:update")); err != nil {
 		return err
 	}
 
@@ -28,8 +32,8 @@ func (o *organizationPlugin) AssignMemberRole(ctx context.Context, user *limen.U
 	}
 	role := resolvedRoles[0]
 
-	if o.isOwnerRole(role) && !o.userCanAssignOwnerRole(ctx, user, organization) {
-		return ErrUserCannotManageOwnerRole
+	if err := o.ensureCanGrantRoles(actor, []*access.Role{role}); err != nil {
+		return err
 	}
 
 	if o.hooks.BeforeAssignMemberRole != nil {
@@ -49,7 +53,11 @@ func (o *organizationPlugin) AssignMemberRole(ctx context.Context, user *limen.U
 }
 
 func (o *organizationPlugin) RevokeMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, roleToRevoke any) error {
-	if err := o.HasPermission(ctx, user, organization.ID, perms("member:update")); err != nil {
+	actor, err := o.loadMemberAccess(ctx, organization.ID, user.ID)
+	if err != nil {
+		return err
+	}
+	if err := actor.requirePermissions(perms("member:update")); err != nil {
 		return err
 	}
 
@@ -84,12 +92,12 @@ func (o *organizationPlugin) RevokeMemberRole(ctx context.Context, user *limen.U
 		return ErrMemberMustHaveAtLeastOneRole
 	}
 
-	if err := o.validateOwnerRoleCanBeRemoved(ctx, organization, role); err != nil {
+	if err := o.ensureCanActOnSpecialRoles(actor, []*access.Role{role}); err != nil {
 		return err
 	}
 
-	if o.isOwnerRole(role) && !o.userCanAssignOwnerRole(ctx, user, organization) {
-		return ErrUserCannotManageOwnerRole
+	if err := o.validateOwnerRoleCanBeRemoved(ctx, organization, role); err != nil {
+		return err
 	}
 
 	if o.hooks.BeforeRevokeMemberRole != nil {
@@ -138,7 +146,11 @@ func (o *organizationPlugin) GetMemberByID(ctx context.Context, organization *Or
 }
 
 func (o *organizationPlugin) RemoveMember(ctx context.Context, user *limen.User, organization *Organization, memberID any) error {
-	if err := o.HasPermission(ctx, user, organization.ID, perms("member:delete")); err != nil {
+	actor, err := o.loadMemberAccess(ctx, organization.ID, user.ID)
+	if err != nil {
+		return err
+	}
+	if err := actor.requirePermissions(perms("member:delete")); err != nil {
 		return err
 	}
 
@@ -153,6 +165,10 @@ func (o *organizationPlugin) RemoveMember(ctx context.Context, user *limen.User,
 
 	memberRoles, err := o.GetMemberRoles(ctx, member.ID)
 	if err != nil {
+		return err
+	}
+
+	if err := o.ensureCanActOnSpecialRoles(actor, memberRoles); err != nil {
 		return err
 	}
 
@@ -216,7 +232,7 @@ func (o *organizationPlugin) GetMemberRoles(ctx context.Context, memberID any) (
 	if err != nil {
 		return nil, err
 	}
-	return o.composeMemberRoles(memberRoles, dynamicRolesByID), nil
+	return o.composeMemberRoles(memberRoles, dynamicRolesByID)
 }
 
 // Get a complete organization member with all its related entities
@@ -306,7 +322,11 @@ func (o *organizationPlugin) attachMemberRoles(ctx context.Context, members []*M
 	}
 
 	for _, member := range members {
-		member.Roles = o.composeMemberRoles(rolesByMember[member.ID], dynamicRolesByID)
+		composed, err := o.composeMemberRoles(rolesByMember[member.ID], dynamicRolesByID)
+		if err != nil {
+			return err
+		}
+		member.Roles = composed
 	}
 	return nil
 }

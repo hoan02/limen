@@ -34,7 +34,11 @@ type ListInvitationsOptions struct {
 }
 
 func (o *organizationPlugin) CreateInvitation(ctx context.Context, user *limen.User, organization *Organization, req *CreateInvitationRequest) (*Invitation, error) {
-	if err := o.HasPermission(ctx, user, organization.ID, perms("invitation:create")); err != nil {
+	actor, err := o.loadMemberAccess(ctx, organization.ID, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := actor.requirePermissions(perms("invitation:create")); err != nil {
 		return nil, err
 	}
 
@@ -52,7 +56,7 @@ func (o *organizationPlugin) CreateInvitation(ctx context.Context, user *limen.U
 		return nil, err
 	}
 
-	role, err := o.validateAndResolveInvitationRole(ctx, user, organization, req.Role)
+	role, err := o.validateAndResolveInvitationRole(ctx, actor, organization, req.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -165,9 +169,14 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		return nil, err
 	}
 
-	status := InvitationStatusAccepted
-	if response == InvitationResponseReject {
+	var status InvitationStatus
+	switch response {
+	case InvitationResponseAccept:
+		status = InvitationStatusAccepted
+	case InvitationResponseReject:
 		status = InvitationStatusRejected
+	default:
+		return nil, ErrInvalidInvitationResponse
 	}
 
 	if status == InvitationStatusAccepted {
@@ -465,7 +474,7 @@ func (o *organizationPlugin) createNewInvitation(ctx context.Context, user *lime
 	return invitation.(*Invitation), nil
 }
 
-func (o *organizationPlugin) validateAndResolveInvitationRole(ctx context.Context, user *limen.User, organization *Organization, role any) (any, error) {
+func (o *organizationPlugin) validateAndResolveInvitationRole(ctx context.Context, actor memberAccess, organization *Organization, role any) (any, error) {
 	resolvedRoles, err := o.resolveRoles(ctx, organization, []any{role})
 	if err != nil {
 		return nil, err
@@ -481,27 +490,13 @@ func (o *organizationPlugin) validateAndResolveInvitationRole(ctx context.Contex
 		result = resolvedRole.Name()
 	}
 
-	if o.isOwnerRole(resolvedRole) && !o.userCanAssignOwnerRole(ctx, user, organization) {
-		return nil, ErrUserCannotInviteOwner
+	if err := o.ensureCanGrantRoles(actor, []*access.Role{resolvedRole}); err != nil {
+		if errors.Is(err, ErrUserCannotManageOwnerRole) {
+			return nil, ErrUserCannotInviteOwner
+		}
+		return nil, err
 	}
 	return result, nil
-}
-
-func (o *organizationPlugin) userCanAssignOwnerRole(ctx context.Context, user *limen.User, organization *Organization) bool {
-	member, err := o.GetMemberByUserID(ctx, organization.ID, user.ID)
-	if err != nil {
-		return false
-	}
-	memberRoles, err := o.GetMemberRoles(ctx, member.ID)
-	if err != nil {
-		return false
-	}
-	for _, memberRole := range memberRoles {
-		if memberRole.Name() == o.getOwnerRole().Name() {
-			return true
-		}
-	}
-	return false
 }
 
 func (o *organizationPlugin) refreshInvitation(ctx context.Context, invitation *Invitation) (*Invitation, error) {
