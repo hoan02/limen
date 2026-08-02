@@ -19,6 +19,9 @@ type API interface {
 	LeaveOrganization(ctx context.Context, session *limen.Session, organizationID any) (*limen.SessionResult, error)
 	CheckSlugAvailability(ctx context.Context, slug string) (bool, error)
 
+	// AddMember adds an existing user to the organization without checking the
+	// caller's permissions; for client-facing joins use the invitation flow.
+	AddMember(ctx context.Context, organizationID, userID, role any) (*Member, error)
 	GetMemberByUserID(ctx context.Context, organizationID, userID any) (*Member, error)
 	GetMemberByID(ctx context.Context, organization *Organization, memberID any) (*Member, error)
 	GetMemberWithRelations(ctx context.Context, user *limen.User, organizationID any) (*Member, error)

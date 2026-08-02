@@ -169,18 +169,14 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		return nil, err
 	}
 
-	var status InvitationStatus
-	switch response {
-	case InvitationResponseAccept:
-		status = InvitationStatusAccepted
-	case InvitationResponseReject:
-		status = InvitationStatusRejected
-	default:
-		return nil, ErrInvalidInvitationResponse
+	status, err := resolveResponseToStatus(response)
+	if err != nil {
+		return nil, err
 	}
 
-	if status == InvitationStatusAccepted {
-		if err := o.checkOrganizationMemberLimit(ctx, organization); err != nil {
+	accepted := status == InvitationStatusAccepted
+	if accepted {
+		if err := o.checkMemberCanJoin(ctx, organization, user); err != nil {
 			return nil, err
 		}
 	}
@@ -195,6 +191,13 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		}
 	}
 
+	if accepted && o.hooks.BeforeAddMember != nil {
+		if err := o.hooks.BeforeAddMember(ctx, organization, user, invitation.Roles[0]); err != nil {
+			return nil, err
+		}
+	}
+
+	var member *Member
 	if err := o.core.WithTransaction(ctx, func(ctx context.Context) error {
 		invitation.Status = status
 		result, err := o.core.UpdateWithResult(ctx, o.invitationSchema, map[limen.SchemaField]any{InvitationSchemaStatusField: status}, []limen.Where{
@@ -210,8 +213,8 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 			return ErrInvalidInvitation
 		}
 
-		if status == InvitationStatusAccepted {
-			_, err := o.createMemberAndAssignRole(ctx, user, organization, invitation.Roles[0])
+		if accepted {
+			member, err = o.insertMemberWithRole(ctx, organization, user, invitation.Roles[0])
 			return err
 		}
 
@@ -220,11 +223,28 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		return nil, err
 	}
 
+	if member != nil && o.hooks.AfterAddMember != nil {
+		o.hooks.AfterAddMember(ctx, organization, user, member)
+	}
+
 	if o.config.hooks.AfterRespondToInvitation != nil {
 		o.config.hooks.AfterRespondToInvitation(ctx, user, organization, invitation, response)
 	}
 
 	return invitation, nil
+}
+
+func resolveResponseToStatus(response InvitationResponse) (InvitationStatus, error) {
+	var status InvitationStatus
+	switch response {
+	case InvitationResponseAccept:
+		status = InvitationStatusAccepted
+	case InvitationResponseReject:
+		status = InvitationStatusRejected
+	default:
+		return "", ErrInvalidInvitationResponse
+	}
+	return status, nil
 }
 
 func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, user *limen.User, organization *Organization, invitationID any) (*Invitation, error) {

@@ -90,6 +90,9 @@ type Hooks struct {
 	BeforeRespondToInvitation func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation, response InvitationResponse) error
 	AfterRespondToInvitation  func(ctx context.Context, user *limen.User, organization *Organization, invitation *Invitation, response InvitationResponse)
 
+	BeforeAddMember func(ctx context.Context, organization *Organization, user *limen.User, role any) error
+	AfterAddMember  func(ctx context.Context, organization *Organization, user *limen.User, member *Member)
+
 	BeforeAssignMemberRole func(ctx context.Context, user *limen.User, organization *Organization, member *Member, role *access.Role) error
 	AfterAssignMemberRole  func(ctx context.Context, user *limen.User, organization *Organization, member *Member, role *access.Role)
 

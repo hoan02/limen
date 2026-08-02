@@ -8,6 +8,38 @@ import (
 	"github.com/thecodearcher/limen/access"
 )
 
+func (o *organizationPlugin) AddMember(ctx context.Context, organizationID, userID, role any) (*Member, error) {
+	organization, err := o.GetOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := o.core.DBAction.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := o.checkMemberCanJoin(ctx, organization, user); err != nil {
+		return nil, err
+	}
+
+	if o.hooks.BeforeAddMember != nil {
+		if err := o.hooks.BeforeAddMember(ctx, organization, user, role); err != nil {
+			return nil, err
+		}
+	}
+
+	member, err := o.insertMemberWithRole(ctx, organization, user, role)
+	if err != nil {
+		return nil, err
+	}
+
+	if o.hooks.AfterAddMember != nil {
+		o.hooks.AfterAddMember(ctx, organization, user, member)
+	}
+	return member, nil
+}
+
 func (o *organizationPlugin) AssignMemberRole(ctx context.Context, user *limen.User, organization *Organization, memberID any, roleToAssign any) error {
 	actor, err := o.loadMemberAccess(ctx, organization.ID, user.ID)
 	if err != nil {
@@ -450,29 +482,36 @@ func (o *organizationPlugin) validateOwnerRoleCanBeRemoved(ctx context.Context, 
 	return nil
 }
 
-func (o *organizationPlugin) createMemberAndAssignRole(ctx context.Context, user *limen.User, organization *Organization, role any) (*Member, error) {
+func (o *organizationPlugin) checkMemberCanJoin(ctx context.Context, organization *Organization, user *limen.User) error {
 	existing, err := o.core.Exists(ctx, o.memberSchema, []limen.Where{
 		limen.Eq(o.memberSchema.GetOrganizationIDField(), organization.ID),
 		limen.Eq(o.memberSchema.GetUserIDField(), user.ID),
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if existing {
-		return nil, ErrMemberAlreadyExists
+		return ErrMemberAlreadyExists
 	}
 
 	if err := o.hasUserReachedMaxOrganizations(ctx, user); err != nil {
-		return nil, err
+		return err
 	}
 
-	var member *Member
+	return o.checkOrganizationMemberLimit(ctx, organization)
+}
+
+// insertMemberWithRole writes the membership and its role. Callers own the guards
+// and the hooks so they can place them relative to their own transaction.
+func (o *organizationPlugin) insertMemberWithRole(ctx context.Context, organization *Organization, user *limen.User, role any) (*Member, error) {
 	resolvedRoles, err := o.resolveRoles(ctx, organization, []any{role})
 	if err != nil {
 		return nil, err
 	}
-	err = o.core.WithTransaction(ctx, func(ctx context.Context) error {
+
+	var member *Member
+	if err := o.core.WithTransaction(ctx, func(ctx context.Context) error {
 		memberModel, err := o.core.CreateAndReturn(ctx, o.memberSchema, &Member{
 			OrganizationID: organization.ID,
 			UserID:         user.ID,
@@ -483,9 +522,7 @@ func (o *organizationPlugin) createMemberAndAssignRole(ctx context.Context, user
 
 		member = memberModel.(*Member)
 		return o.assignMemberRole(ctx, member, resolvedRoles[0])
-	})
-
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
