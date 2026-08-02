@@ -152,7 +152,37 @@ func (o *organizationPlugin) GetInvitationByToken(ctx context.Context, user *lim
 	return invitation, nil
 }
 
+type respondToInvitationPrep struct {
+	invitation   *Invitation
+	organization *Organization
+	status       InvitationStatus
+	accepted     bool
+}
+
 func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *limen.User, invitationToken string, response InvitationResponse) (*Invitation, error) {
+	prep, err := o.prepareRespondToInvitation(ctx, user, invitationToken, response)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := o.invokeRespondToInvitationBeforeHooks(ctx, user, prep, response); err != nil {
+		return nil, err
+	}
+
+	member, err := o.commitRespondToInvitation(ctx, user, prep)
+	if err != nil {
+		return nil, err
+	}
+
+	o.invokeRespondToInvitationAfterHooks(ctx, user, prep, response, member)
+
+	if err := o.attachInvitationRelations(ctx, prep.organization, []*Invitation{prep.invitation}, InvitationRelations{}); err != nil {
+		return nil, err
+	}
+	return prep.invitation, nil
+}
+
+func (o *organizationPlugin) prepareRespondToInvitation(ctx context.Context, user *limen.User, invitationToken string, response InvitationResponse) (*respondToInvitationPrep, error) {
 	invitation, err := o.FindPendingInvitation(ctx, &FindPendingInvitationOptions{
 		InvitationToken: invitationToken,
 	})
@@ -181,57 +211,57 @@ func (o *organizationPlugin) RespondToInvitation(ctx context.Context, user *lime
 		}
 	}
 
-	if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{}); err != nil {
-		return nil, err
-	}
+	return &respondToInvitationPrep{
+		invitation:   invitation,
+		organization: organization,
+		status:       status,
+		accepted:     accepted,
+	}, nil
+}
 
+func (o *organizationPlugin) invokeRespondToInvitationBeforeHooks(ctx context.Context, user *limen.User, prep *respondToInvitationPrep, response InvitationResponse) error {
 	if o.config.hooks.BeforeRespondToInvitation != nil {
-		if err := o.config.hooks.BeforeRespondToInvitation(ctx, user, organization, invitation, response); err != nil {
-			return nil, err
+		if err := o.config.hooks.BeforeRespondToInvitation(ctx, user, prep.organization, prep.invitation, response); err != nil {
+			return err
 		}
 	}
 
-	if accepted && o.hooks.BeforeAddMember != nil {
-		if err := o.hooks.BeforeAddMember(ctx, organization, user, invitation.Roles[0]); err != nil {
-			return nil, err
-		}
+	if prep.accepted && o.hooks.BeforeAddMember != nil {
+		return o.hooks.BeforeAddMember(ctx, prep.organization, user, prep.invitation.Roles[0])
 	}
+	return nil
+}
 
+func (o *organizationPlugin) invokeRespondToInvitationAfterHooks(ctx context.Context, user *limen.User, prep *respondToInvitationPrep, response InvitationResponse, member *Member) {
+	if member != nil && o.hooks.AfterAddMember != nil {
+		o.hooks.AfterAddMember(ctx, prep.organization, user, member)
+	}
+	if o.config.hooks.AfterRespondToInvitation != nil {
+		o.config.hooks.AfterRespondToInvitation(ctx, user, prep.organization, prep.invitation, response)
+	}
+}
+
+func (o *organizationPlugin) commitRespondToInvitation(ctx context.Context, user *limen.User, prep *respondToInvitationPrep) (*Member, error) {
 	var member *Member
-	if err := o.core.WithTransaction(ctx, func(ctx context.Context) error {
-		invitation.Status = status
-		result, err := o.core.UpdateWithResult(ctx, o.invitationSchema, map[limen.SchemaField]any{InvitationSchemaStatusField: status}, []limen.Where{
-			limen.Eq(o.invitationSchema.GetIDField(), invitation.ID),
+	err := o.core.WithTransaction(ctx, func(ctx context.Context) error {
+		prep.invitation.Status = prep.status
+		result, err := o.core.UpdateWithResult(ctx, o.invitationSchema, map[limen.SchemaField]any{InvitationSchemaStatusField: prep.status}, []limen.Where{
+			limen.Eq(o.invitationSchema.GetIDField(), prep.invitation.ID),
 			limen.Eq(o.invitationSchema.GetStatusField(), InvitationStatusPending),
 		})
-
 		if err != nil {
 			return err
 		}
-
 		if result.RowsAffected == 0 {
 			return ErrInvalidInvitation
 		}
-
-		if accepted {
-			member, err = o.insertMemberWithRole(ctx, organization, user, invitation.Roles[0])
+		if prep.accepted {
+			member, err = o.insertMemberWithRole(ctx, prep.organization, user, prep.invitation.Roles[0])
 			return err
 		}
-
 		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	if member != nil && o.hooks.AfterAddMember != nil {
-		o.hooks.AfterAddMember(ctx, organization, user, member)
-	}
-
-	if o.config.hooks.AfterRespondToInvitation != nil {
-		o.config.hooks.AfterRespondToInvitation(ctx, user, organization, invitation, response)
-	}
-
-	return invitation, nil
+	})
+	return member, err
 }
 
 func resolveResponseToStatus(response InvitationResponse) (InvitationStatus, error) {
@@ -263,10 +293,6 @@ func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, user *
 		return nil, ErrInvalidInvitation
 	}
 
-	if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{}); err != nil {
-		return nil, err
-	}
-
 	if o.config.hooks.BeforeCancelInvitation != nil {
 		if err := o.config.hooks.BeforeCancelInvitation(ctx, user, organization, invitation); err != nil {
 			return nil, err
@@ -280,6 +306,10 @@ func (o *organizationPlugin) CancelPendingInvitation(ctx context.Context, user *
 
 	if o.config.hooks.AfterCancelInvitation != nil {
 		o.config.hooks.AfterCancelInvitation(ctx, user, organization, invitation)
+	}
+
+	if err := o.attachInvitationRelations(ctx, organization, []*Invitation{invitation}, InvitationRelations{}); err != nil {
+		return nil, err
 	}
 
 	return invitation, nil
