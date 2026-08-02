@@ -192,31 +192,45 @@ func (o *organizationPlugin) RemoveMember(ctx context.Context, user *limen.User,
 	return nil
 }
 
-func (o *organizationPlugin) LeaveOrganization(ctx context.Context, user *limen.User, organizationID any) error {
+func (o *organizationPlugin) LeaveOrganization(ctx context.Context, session *limen.Session, organizationID any) (*limen.SessionResult, error) {
 	organization, err := o.GetOrganization(ctx, organizationID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	member, err := o.GetMemberByUserID(ctx, organization.ID, user.ID)
+	member, err := o.GetMemberByUserID(ctx, organization.ID, session.UserID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := o.validateMemberBelongsToOrganization(member, organization); err != nil {
-		return err
+		return nil, err
 	}
 
 	memberRoles, err := o.GetMemberRoles(ctx, member.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := o.validateOwnerRoleCanBeRemoved(ctx, organization, memberRoles...); err != nil {
-		return err
+		return nil, err
 	}
 
-	return o.deleteMember(ctx, organization, member)
+	if err := o.deleteMember(ctx, organization, member); err != nil {
+		return nil, err
+	}
+
+	activeID, err := o.GetActiveOrganizationID(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+
+	sv := o.sessionOrganizationID(organization)
+	if activeID != sv.Internal && activeID != sv.Client {
+		return nil, nil
+	}
+
+	return o.SetActiveOrganization(ctx, session, nil)
 }
 
 func (o *organizationPlugin) GetMemberRoles(ctx context.Context, memberID any) ([]*access.Role, error) {

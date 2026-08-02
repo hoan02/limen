@@ -506,13 +506,13 @@ func (h *organizationHandlers) LeaveOrganization(w http.ResponseWriter, r *http.
 		return
 	}
 
-	err = h.plugin.LeaveOrganization(r.Context(), session.User, body["organization"].(string))
+	sessionResult, err := h.plugin.LeaveOrganization(r.Context(), session.Session, body["organization"].(string))
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
 	}
 
-	h.responder.JSON(w, r, http.StatusNoContent, nil)
+	h.responder.JSONWithSession(w, r, http.StatusNoContent, nil, sessionResult)
 }
 
 func (h *organizationHandlers) CreateOrganizationRole(w http.ResponseWriter, r *http.Request) {

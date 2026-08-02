@@ -13,7 +13,10 @@ type API interface {
 	ListOrganizations(ctx context.Context, user *limen.User, filter *ListOrganizationsFilter, opts *limen.QueryOptions) (*limen.Page[*Organization], error)
 	UpdateOrganization(ctx context.Context, user *limen.User, organizationID any, req *UpdateOrganizationRequest) (*Organization, error)
 	DeleteOrganization(ctx context.Context, user *limen.User, organizationID any) error
-	LeaveOrganization(ctx context.Context, user *limen.User, organizationID any) error
+	// LeaveOrganization removes the user from the organization.
+	// When the left organization is the session's active organization, a non-nil
+	// SessionResult carries a re-issued session token that must be delivered to the client.
+	LeaveOrganization(ctx context.Context, session *limen.Session, organizationID any) (*limen.SessionResult, error)
 	CheckSlugAvailability(ctx context.Context, slug string) (bool, error)
 
 	GetMemberByUserID(ctx context.Context, organizationID, userID any) (*Member, error)
