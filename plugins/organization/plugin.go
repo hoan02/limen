@@ -76,6 +76,10 @@ func (p *organizationPlugin) Initialize(core *limen.LimenCore) error {
 		return errors.New("organization: access control must be provided")
 	}
 
+	if p.config.maxOrgPerUser < 0 {
+		return errors.New("organization: max organizations per user cannot be negative")
+	}
+
 	if len(p.config.roles) == 0 {
 		roles, err := DefaultRoles(p.config.accessControl)
 		if err != nil {
@@ -89,19 +93,29 @@ func (p *organizationPlugin) Initialize(core *limen.LimenCore) error {
 	}
 
 	if p.getOwnerRole() == nil {
-		return errors.New("organization: owner role must be provided")
+		return fmt.Errorf("organization: creator role %q is not among the configured roles", p.config.ownerRole)
 	}
 
 	return nil
 }
 
 func (p *organizationPlugin) validateRoles() error {
-	seen := make(map[string]bool)
+	seen := make(map[string]bool, len(p.config.roles))
 	for _, role := range p.config.roles {
-		if seen[role.Name()] {
-			return fmt.Errorf("role %q is defined multiple times", role.Name())
+		name := strings.ToLower(role.Name())
+		if seen[name] {
+			return fmt.Errorf("organization: role %q is defined multiple times", role.Name())
 		}
-		seen[role.Name()] = true
+		seen[name] = true
+
+		// Configured roles are static; an ID would route writes to organization_role_id.
+		if role.ID() != nil {
+			return fmt.Errorf("organization: configured role %q must not carry an ID", role.Name())
+		}
+
+		if _, err := p.config.accessControl.NewRole(role.Name(), role.Permissions()); err != nil {
+			return fmt.Errorf("organization: role %q is not valid against the configured access control: %w", role.Name(), err)
+		}
 	}
 	return nil
 }
