@@ -97,7 +97,7 @@ type Hooks struct {
 	AfterRevokeMemberRole  func(ctx context.Context, user *limen.User, organization *Organization, member *Member, role *access.Role)
 
 	BeforeRemoveMember func(ctx context.Context, user *limen.User, organization *Organization, member *Member) error
-	AfterRemoveMember  func(ctx context.Context, user *limen.User, organization *Organization, member *Member) error
+	AfterRemoveMember  func(ctx context.Context, user *limen.User, organization *Organization, member *Member)
 
 	BeforeCreateOrganizationRole func(ctx context.Context, user *limen.User, organization *Organization, request *CreateOrganizationRoleRequest) error
 	AfterCreateOrganizationRole  func(ctx context.Context, user *limen.User, organization *Organization, role *OrganizationRole)
