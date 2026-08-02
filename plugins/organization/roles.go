@@ -21,7 +21,6 @@ func (o *organizationPlugin) CreateOrganizationRole(ctx context.Context, user *l
 		return nil, err
 	}
 
-	req.Name = strings.TrimSpace(strings.ToLower(req.Name))
 	if err := o.checkCustomRolesEnabled(); err != nil {
 		return nil, err
 	}
