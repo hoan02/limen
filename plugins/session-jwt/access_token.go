@@ -128,6 +128,8 @@ func (p *sessionJWTPlugin) performRefresh(ctx context.Context, rawRefreshToken s
 			_ = p.DeleteRefreshTokenFamily(ctx, family)
 			return nil, nil, ErrRefreshTokenReuse
 		}
+
+		return nil, nil, ErrInvalidRefreshToken
 	}
 
 	if time.Now().After(rt.ExpiresAt) {
