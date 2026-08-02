@@ -463,6 +463,10 @@ func (o *organizationPlugin) createMemberAndAssignRole(ctx context.Context, user
 		return nil, ErrMemberAlreadyExists
 	}
 
+	if err := o.hasUserReachedMaxOrganizations(ctx, user); err != nil {
+		return nil, err
+	}
+
 	var member *Member
 	resolvedRoles, err := o.resolveRoles(ctx, organization, []any{role})
 	if err != nil {
