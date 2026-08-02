@@ -13,7 +13,6 @@ type organizationPlugin struct {
 	config *config
 
 	core *limen.LimenCore
-	db   *limen.DatabaseActionHelper
 
 	organizationSchema     *organizationSchema
 	memberSchema           *memberSchema
@@ -72,7 +71,6 @@ func (p *organizationPlugin) GetSchemas(schema *limen.SchemaConfig) []limen.Sche
 
 func (p *organizationPlugin) Initialize(core *limen.LimenCore) error {
 	p.core = core
-	p.db = core.DBAction
 
 	if p.config.accessControl == nil {
 		return errors.New("organization: access control must be provided")

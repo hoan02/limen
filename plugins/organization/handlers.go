@@ -2,7 +2,6 @@ package organization
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/thecodearcher/limen"
 )
@@ -19,10 +18,6 @@ func NewOrganizationHandlers(plugin *organizationPlugin, httpCore *limen.LimenHT
 func (p *organizationPlugin) PluginHTTPConfig() limen.PluginHTTPConfig {
 	return limen.PluginHTTPConfig{
 		BasePath: "/organizations",
-		RateLimitRules: []*limen.RateLimitRule{
-			limen.NewRateLimitRuleWithMethod(http.MethodPost, "/", 5, 10*time.Second),
-			limen.NewRateLimitRuleWithMethod(http.MethodPost, "/invitations/respond", 5, 10*time.Second),
-		},
 	}
 }
 
