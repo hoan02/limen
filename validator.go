@@ -275,10 +275,22 @@ func asAnySlice(value any) ([]any, bool) {
 		}
 		return items, true
 	case string:
-		return []any{v}, true
+		return splitListValue(v), true
 	default:
 		return nil, false
 	}
+}
+
+// splitListValue reads a comma-separated query value as a list, so array fields
+// accept both `?k=a,b` and a repeated `?k=a&k=b`.
+func splitListValue(value string) []any {
+	items := make([]any, 0, 1)
+	for item := range strings.SplitSeq(value, ",") {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			items = append(items, trimmed)
+		}
+	}
+	return items
 }
 
 func (f *FieldValidator) MinLength(minLen int) *FieldValidator {
