@@ -5,7 +5,7 @@ import { resolvePath } from "./path";
 import type { FetchInit, FetchOptions } from "./plugin";
 import type { AnyRoute, HttpRunner, RouteCallOptions } from "./route";
 import { defaultSerialize } from "./serialize";
-import type { Session } from "./types";
+import type { QueryParams, Session } from "./types";
 
 /**
  * Run the default HTTP steps for a route — merge defaults, resolve path params,
@@ -22,7 +22,7 @@ async function runHttp(ctx: AnyRouteContext, def: AnyRoute, input: unknown, call
 
   const init: FetchInit = { ...callInit, method: def.method, absolute: def.absolute ?? false };
   if (def.method === "GET" && payload !== undefined) {
-    init.query = payload as Record<string, string>;
+    init.query = payload as QueryParams;
   } else {
     init.body = payload;
   }

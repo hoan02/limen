@@ -96,6 +96,19 @@ export type Session<TFields = unknown> = {
   user: User<TFields>;
 };
 
+/**
+ * Query values for a request. An array value is sent comma-separated.
+ */
+export type QueryParams = Record<string, string>;
+
+/**
+ * Pagination accepted by list routes.
+ */
+export type PaginationInput = {
+  page?: number;
+  perPage?: number;
+};
+
 export type Page<T> = {
   items: T[];
   total: number;
