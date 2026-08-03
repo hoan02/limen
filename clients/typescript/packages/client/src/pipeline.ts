@@ -1,6 +1,6 @@
 import type { AnyRouteContext } from "./context";
 import type { LimenError } from "./errors";
-import { camelizeEach } from "./helpers";
+import { camelizeEach, camelizeKeys, camelizePage, isPageResponse } from "./helpers";
 import { resolvePath } from "./path";
 import type { FetchInit, FetchOptions } from "./plugin";
 import type { AnyRoute, HttpRunner, RouteCallOptions } from "./route";
@@ -36,7 +36,10 @@ async function runHttp(ctx: AnyRouteContext, def: AnyRoute, input: unknown, call
   if (def.parse !== undefined) {
     return def.parse(raw);
   }
-  return Array.isArray(raw) ? camelizeEach(raw) : raw;
+  if (isPageResponse(raw)) {
+    return camelizePage(raw);
+  }
+  return Array.isArray(raw) ? camelizeEach(raw) : camelizeKeys(raw);
 }
 
 async function applyEffects(ctx: AnyRouteContext, def: AnyRoute, result: unknown): Promise<void> {

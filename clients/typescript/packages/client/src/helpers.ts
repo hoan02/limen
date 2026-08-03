@@ -60,6 +60,23 @@ export function camelizeEach<T = Record<string, unknown>>(raw: unknown): T[] {
   return raw.map((item) => camelizeKeys<T>(item));
 }
 
+/**
+ * Whether a response carries a full pagination envelope.
+ */
+export function isPageResponse(raw: unknown): boolean {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return false;
+  }
+  const value = raw as Record<string, unknown>;
+  return (
+    Array.isArray(value["items"]) &&
+    typeof value["total"] === "number" &&
+    typeof value["page"] === "number" &&
+    typeof value["per_page"] === "number" &&
+    typeof value["total_pages"] === "number"
+  );
+}
+
 /** Camelize a paginated response and each item it contains. */
 export function camelizePage<T>(
   raw: unknown,
