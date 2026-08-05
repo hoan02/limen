@@ -42,7 +42,7 @@ await auth.signIn.credential({ credential: "ada@example.com", password: "secret"
 await auth.signout();
 ```
 
-Using a framework? `limen-auth/react`, `/vue`, `/svelte`, and `/solid` give you a `useSession()` hook over the same store.
+Using a framework? `limen-auth/react`, `/vue`, `/svelte`, and `/solid` give you a `useSession()` hook over the same store — plus one hook per store any plugin registers, so the organization plugin's `$activeOrganization` becomes `useActiveOrganization()`.
 
 ## Documentation
 

@@ -9,6 +9,8 @@ export { defaultSessionParse, normalizeUser } from "./normalize";
 export type { SessionState, SessionStore } from "./session-store";
 export { createStore } from "./data-store";
 export type { DataStore, RefetchOptions, StoreLoader, StoreState } from "./data-store";
+export { createAuthStore } from "./auth-store";
+export type { CreateAuthStoreOptions } from "./auth-store";
 
 export type {
   AfterResponseHook,
