@@ -34,6 +34,11 @@ export function toCamelCaseKey(key: string): string {
   return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
+/** `activeOrganization` -> `ActiveOrganization`, for generated hook names. */
+export function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export function kebabToCamel(key: string): string {
   return key.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }

@@ -1,35 +1,29 @@
 import type { Readable } from "svelte/store";
 import { createAuthClient as createCoreClient } from "../client";
 import type { AnyClientPlugin } from "../define-plugin";
-import type { InferUserFields } from "../infer";
-import type { SessionState } from "../session-store";
+import type { StoresOf } from "../infer";
+import { attachStoreHooks } from "../stores";
 import type { Prettify } from "../type-utils";
-import type { AuthClient, CreateAuthClientOptions, PrettyUserFields } from "../types";
+import type { AuthClient, CreateAuthClientOptions } from "../types";
 
-/**
- * An {@link AuthClient} augmented with Svelte stores.
- */
+/** One accessor per registered store, each returning a Svelte readable. */
+export type SvelteStoreHooks<Stores> = {
+  readonly [K in keyof Stores & string as `use${Capitalize<K>}`]: () => Readable<Stores[K]>;
+};
+
 export type SvelteAuthClient<Plugins extends readonly AnyClientPlugin[], TFields = unknown> = Prettify<
-  AuthClient<Plugins, TFields> & {
-    /**
-     * The reactive session as a Svelte readable store. Use it with `$`:
-     * `$session.data`, `$session.isPending`, `$session.error`.
-     */
-    useSession: () => Readable<SessionState<PrettyUserFields<Plugins, TFields>>>;
-  }
+  AuthClient<Plugins, TFields> & SvelteStoreHooks<StoresOf<Plugins, TFields>>
 >;
 
-/**
- * Create a Limen auth client with Svelte stores attached.
- */
 export function createAuthClient<const Plugins extends readonly AnyClientPlugin[] = readonly [], TFields = unknown>(
   opts: CreateAuthClientOptions<Plugins, TFields>,
 ): SvelteAuthClient<Plugins, TFields> {
   const client = createCoreClient<Plugins, TFields>(opts);
-  const useSession = (): Readable<SessionState<PrettyUserFields<Plugins, TFields>>> =>
-    client.$session as unknown as Readable<SessionState<InferUserFields<Plugins, TFields>>>;
 
-  return Object.assign(client, { useSession }) as SvelteAuthClient<Plugins, TFields>;
+  // Nanostores atoms already satisfy the Svelte store contract.
+  attachStoreHooks(client, (store) => store);
+
+  return client as SvelteAuthClient<Plugins, TFields>;
 }
 
 export type { SessionState, SessionStore } from "../session-store";

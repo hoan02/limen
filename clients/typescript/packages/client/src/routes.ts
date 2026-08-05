@@ -1,4 +1,3 @@
-import type { RouteContext } from "./context";
 import { defineClientPlugin, defineRoutes } from "./define-plugin";
 import type { InferPluginContribution } from "./infer";
 import { route } from "./route";
@@ -64,7 +63,7 @@ export function coreClientPlugin<TFields = unknown>() {
        */
       getSession: async (): Promise<Session<TFields> | null> => {
         await ctx.refetchSession();
-        const state = ctx.store.$session.get();
+        const state = ctx.store.$state.get();
         if (state.error) {
           throw state.error;
         }
@@ -75,15 +74,3 @@ export function coreClientPlugin<TFields = unknown>() {
 }
 
 export type CoreContribution<TFields = unknown> = InferPluginContribution<ReturnType<typeof coreClientPlugin<TFields>>>;
-
-/**
- * Fetch and parse the current session for the reactive store.
- */
-export function createSessionHydrator<TFields>(
-  ctx: Pick<RouteContext<TFields>, "fetch" | "parseSession">,
-): () => Promise<Session<TFields>> {
-  return async () => {
-    const raw = await ctx.fetch<unknown>("/me", { method: "GET" });
-    return ctx.parseSession(raw);
-  };
-}

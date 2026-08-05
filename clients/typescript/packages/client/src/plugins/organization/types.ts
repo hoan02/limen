@@ -1,8 +1,19 @@
+import type { FieldsOf } from "../../define-plugin";
 import type { PaginationInput, User } from "../../types";
 
 export type OrganizationPermissions = Record<string, string[]>;
 
-export type Organization = {
+/**
+ * The app's own columns on the plugin's models, declared with `fields()`.
+ */
+export type OrganizationModelFields = {
+  organization?: object;
+  member?: object;
+  invitation?: object;
+  role?: object;
+};
+
+export type Organization<F = unknown> = {
   id: string;
   name: string;
   slug: string;
@@ -10,52 +21,52 @@ export type Organization = {
   metadata: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
-};
+} & FieldsOf<F, "organization">;
 
 /**
  * Nested organization on a member or invitation. The fields the server embeds
  * are configurable, so every field beyond the identifier may be absent.
  */
-export type EmbeddedOrganization = Partial<Organization>;
+export type EmbeddedOrganization<F = unknown> = Partial<Organization<F>>;
 
 export type EmbeddedUser = Partial<Omit<User, "emailVerifiedAt">> & {
   firstName?: string;
   lastName?: string;
 };
 
-export type Member = {
+export type Member<F = unknown> = {
   id: string;
   roles?: string[];
   permissions?: string[];
-  organization?: Organization;
+  organization?: Organization<F>;
   user?: EmbeddedUser;
   createdAt: string;
   updatedAt: string;
-};
+} & FieldsOf<F, "member">;
 
 export type InvitationStatus = "pending" | "accepted" | "rejected" | "canceled";
 
-export type Invitation = {
+export type Invitation<F = unknown> = {
   id: string;
   email: string;
   status: InvitationStatus;
   roles?: string[];
   expiresAt: string | null;
   isExpired: boolean;
-  organization?: EmbeddedOrganization;
+  organization?: EmbeddedOrganization<F>;
   inviter?: EmbeddedUser;
   createdAt: string;
   updatedAt: string;
-};
+} & FieldsOf<F, "invitation">;
 
-export type OrganizationRole = {
+export type OrganizationRole<F = unknown> = {
   id: string;
   name: string;
   description: string | null;
   permissions: OrganizationPermissions;
   createdAt: string;
   updatedAt: string;
-};
+} & FieldsOf<F, "role">;
 
 export type OrganizationPluginConfig = {
   /**
@@ -63,12 +74,21 @@ export type OrganizationPluginConfig = {
    * with `WithCustomRoles(true)`; the routes are not registered otherwise.
    */
   customRoles?: boolean;
+  /**
+   * The app's own columns on the organization models, declared with `fields()`.
+   * Type-only — it is never read at runtime.
+   */
+  fields?: OrganizationModelFields;
 };
 
 export type CreateOrganizationInput = {
   name: string;
   slug?: string;
   logo?: string;
+  /**
+   * Extra columns for the new organization, sent at the body root. The server
+   * reads them through the schema's additional-fields function.
+   */
   additionalFields?: Record<string, unknown>;
 };
 

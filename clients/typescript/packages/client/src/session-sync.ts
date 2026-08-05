@@ -10,8 +10,6 @@ const FOCUS_REFETCH_THROTTLE_MS = 5_000;
 type SyncMessage<TFields> = { data: Session<TFields> | null };
 
 type SessionSyncOptions = {
-  /** Fetch the session on mount. */
-  fetchOnMount: boolean;
   /** Mirror session changes to other same-origin tabs. */
   crossTabSync: boolean;
   /** Re-validate against `/me` when the tab returns to the foreground. */
@@ -22,10 +20,6 @@ export function createSessionSync<TFields = unknown>(
   store: SessionStore<TFields>,
   options: SessionSyncOptions,
 ): () => void {
-  if (options.fetchOnMount) {
-    void store.refetch();
-  }
-
   const teardowns: Array<() => void> = [];
   if (options.crossTabSync) {
     teardowns.push(syncAcrossTabs(store));
@@ -44,7 +38,7 @@ export function createSessionSync<TFields = unknown>(
 
 function syncAcrossTabs<TFields>(store: SessionStore<TFields>): () => void {
   const port = createBroadcastChannel<SyncMessage<TFields>>(CHANNEL_NAME);
-  let lastData = store.$session.get().data;
+  let lastData = store.$state.get().data;
 
   const unsubscribe = port.subscribe((message) => {
     // Mark remote updates as seen before applying them to avoid echoing them.
@@ -52,8 +46,8 @@ function syncAcrossTabs<TFields>(store: SessionStore<TFields>): () => void {
     store.setData(message.data);
   });
 
-  const unbindNotify = onNotify(store.$session, () => {
-    const data = store.$session.get().data;
+  const unbindNotify = onNotify(store.$state, () => {
+    const data = store.$state.get().data;
     if (deepJsonEqual(data, lastData)) {
       return;
     }
@@ -74,7 +68,7 @@ function refetchOnFocus<TFields>(store: SessionStore<TFields>): () => void {
   }
   const onVisibilityChange = (): void => {
     if (document.visibilityState === "visible") {
-      void store.refetch({ maxAgeMs: FOCUS_REFETCH_THROTTLE_MS, skipSignedOut: true });
+      void store.refetch({ maxAgeMs: FOCUS_REFETCH_THROTTLE_MS, skipWhenEmpty: true });
     }
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
