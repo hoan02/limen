@@ -11,7 +11,7 @@ type CreateOrganizationRequest struct {
 	Name             string         `json:"name"`
 	Slug             string         `json:"slug"`
 	Logo             *string        `json:"logo,omitempty"`
-	AdditionalFields map[string]any `json:"additional_fields"`
+	AdditionalFields map[string]any `json:"-"`
 }
 
 type ListOrganizationsFilter struct {
