@@ -36,6 +36,7 @@ func routes(h *organizationHandlers, routeBuilder *limen.RouteBuilder) {
 
 	routeBuilder.ProtectedGET("/members", "organizations:members-list", h.ListMembers)
 	routeBuilder.ProtectedGET("/me", "organizations:member-get", h.GetMember)
+	routeBuilder.ProtectedGET("/active", "organizations:get-active", h.GetActiveOrganization)
 	routeBuilder.ProtectedPOST("/switch", "organizations:switch", h.SwitchOrganization)
 	routeBuilder.ProtectedPOST("/leave", "organizations:leave-organization", h.LeaveOrganization)
 
@@ -194,6 +195,22 @@ func (h *organizationHandlers) ListOrganizations(w http.ResponseWriter, r *http.
 		PerPage:    data.PerPage,
 		TotalPages: data.TotalPages,
 	})
+}
+
+func (h *organizationHandlers) GetActiveOrganization(w http.ResponseWriter, r *http.Request) {
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	organization, err := h.plugin.GetActiveOrganization(r.Context(), session.Session, session.User)
+	if err != nil {
+		h.responder.Error(w, r, err)
+		return
+	}
+
+	h.responder.JSON(w, r, http.StatusOK, h.plugin.core.SerializeModel(h.plugin.organizationSchema, organization))
 }
 
 func (h *organizationHandlers) GetMember(w http.ResponseWriter, r *http.Request) {

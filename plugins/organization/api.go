@@ -58,6 +58,7 @@ type API interface {
 	// A non-nil SessionResult carries a re-issued session token that must be delivered to the client.
 	SetActiveOrganization(ctx context.Context, session *limen.Session, organization *Organization) (*limen.SessionResult, error)
 	GetActiveOrganizationID(ctx context.Context, session *limen.Session) (any, error)
+	GetActiveOrganization(ctx context.Context, session *limen.Session, user *limen.User) (*Organization, error)
 
 	HasPermission(ctx context.Context, user *limen.User, organizationID any, permissions access.Permissions) error
 }

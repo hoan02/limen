@@ -2,7 +2,6 @@ package organization
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/thecodearcher/limen"
@@ -46,18 +45,14 @@ func (o *organizationPlugin) GetActiveOrganizationIDFromCtx(ctx context.Context)
 func (o *organizationPlugin) RequireActiveOrganizationMiddleware() limen.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			session, organizationID, err := o.GetActiveOrganizationIDFromCtx(r.Context())
+			session, err := limen.GetCurrentSessionFromCtx(r.Context())
 			if err != nil {
 				o.responder.Error(w, r, err)
 				return
 			}
 
-			organization, err := o.GetOrganization(r.Context(), organizationID)
+			organization, err := o.resolveActiveOrganization(r.Context(), session.Session)
 			if err != nil {
-				if errors.Is(err, limen.ErrRecordNotFound) {
-					o.responder.Error(w, r, ErrNoActiveOrganization)
-					return
-				}
 				o.responder.Error(w, r, err)
 				return
 			}

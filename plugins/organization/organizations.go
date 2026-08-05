@@ -3,6 +3,7 @@ package organization
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/thecodearcher/limen"
@@ -318,6 +319,40 @@ func defaultSlugGenerator(name string, providedSlug string) string {
 		return slug
 	}
 	return strings.ToLower(limen.GenerateRandomString(12, limen.CharSetAlphanumeric))
+}
+
+func (o *organizationPlugin) resolveActiveOrganization(ctx context.Context, session *limen.Session) (*Organization, error) {
+	organizationID, err := o.GetActiveOrganizationID(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+	if organizationID == nil {
+		return nil, ErrNoActiveOrganization
+	}
+
+	organization, err := o.GetOrganization(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, limen.ErrRecordNotFound) {
+			return nil, ErrNoActiveOrganization
+		}
+		return nil, err
+	}
+	return organization, nil
+}
+
+func (o *organizationPlugin) GetActiveOrganization(ctx context.Context, session *limen.Session, user *limen.User) (*Organization, error) {
+	organization, err := o.resolveActiveOrganization(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := o.CheckMemberExistsInOrganization(ctx, organization.ID, user.ID); err != nil {
+		if errors.Is(err, ErrMemberNotInOrganization) {
+			return nil, ErrNoActiveOrganization
+		}
+		return nil, err
+	}
+	return organization, nil
 }
 
 func (o *organizationPlugin) GetOrganization(ctx context.Context, organizationID any) (*Organization, error) {
