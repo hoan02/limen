@@ -1,5 +1,4 @@
 import { defineClientPlugin, defineRoutes } from "../../define-plugin";
-import { camelizeKeys, camelizePage } from "../../helpers";
 import { route } from "../../route";
 import type { Page } from "../../types";
 import type {
@@ -13,37 +12,29 @@ import type {
   UpdateApiKeyInput,
 } from "./types";
 
-function parseApiKey<T extends ApiKey>(raw: unknown): T {
-  return camelizeKeys<T>(raw);
-}
-
 export function apiKeyPlugin() {
   const routes = defineRoutes(
     route<CreateApiKeyInput, CreateApiKeyResult>()({
       method: "POST",
       path: "/",
       as: "apiKey.create",
-      parse: (raw) => parseApiKey<CreateApiKeyResult>(raw),
     }),
     route<ListApiKeysInput, Page<ApiKey>>()({
       method: "GET",
       path: "/",
       as: "apiKey.list",
-      parse: (raw) => camelizePage<ApiKey>(raw),
     }),
     route<GetApiKeyInput, ApiKey>()({
       method: "GET",
       path: "/:id",
       as: "apiKey.get",
       params: ["id"],
-      parse: parseApiKey,
     }),
     route<UpdateApiKeyInput, ApiKey>()({
       method: "PATCH",
       path: "/:id",
       as: "apiKey.update",
       params: ["id"],
-      parse: parseApiKey,
     }),
     route<RevokeApiKeyInput, void>()({
       method: "DELETE",
@@ -56,7 +47,6 @@ export function apiKeyPlugin() {
       path: "/:id/rotate",
       as: "apiKey.rotate",
       params: ["id"],
-      parse: (raw) => parseApiKey<CreateApiKeyResult>(raw),
     }),
   );
 

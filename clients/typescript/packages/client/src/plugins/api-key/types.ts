@@ -1,3 +1,5 @@
+import type { PaginationInput } from "../../types";
+
 export type ApiKeyPermissions = Record<string, string[]>;
 
 export type ApiKey = {
@@ -29,12 +31,12 @@ export type CreateApiKeyResult = ApiKey & {
   key: string;
 };
 
-export type ListApiKeysInput = {
-  profile?: string;
-  status?: "enabled" | "disabled";
-  page?: number;
-  perPage?: number;
-};
+export type ListApiKeysInput =
+  | (PaginationInput & {
+      profile?: string;
+      status?: "enabled" | "disabled";
+    })
+  | void;
 
 export type GetApiKeyInput = {
   id: string | number;
