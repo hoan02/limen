@@ -39,6 +39,7 @@ type API interface {
 	UpdateOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any, req *UpdateOrganizationRoleRequest) (*OrganizationRole, error)
 	DeleteOrganizationRole(ctx context.Context, user *limen.User, organization *Organization, roleID any) error
 	GetMemberPermissions(ctx context.Context, organizationID any, user *limen.User) (access.Permissions, error)
+	ApiKeyPrincipal() *ApiKeyPrincipal
 
 	CreateInvitation(ctx context.Context, user *limen.User, organization *Organization, req *CreateInvitationRequest) (*Invitation, error)
 	FindPendingInvitation(ctx context.Context, options *FindPendingInvitationOptions) (*Invitation, error)
