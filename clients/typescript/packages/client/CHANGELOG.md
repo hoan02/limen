@@ -1,5 +1,11 @@
 # limen-auth
 
+## 0.1.0
+
+### Minor Changes
+
+- 576438d: Organization + API key plugins, reactive active-org stores, and client-side permission checks.
+
 ## 0.0.4
 
 ### Patch Changes
