@@ -46,6 +46,13 @@ func (p *apiKeyPlugin) ValidateApiKey(ctx context.Context, key string, requiredP
 		return nil, ErrInvalidAPIKey
 	}
 
+	if err := p.ensurePrincipalExists(ctx, apiKey.PrincipalType, apiKey.PrincipalID); err != nil {
+		if errors.Is(err, limen.ErrRecordNotFound) {
+			return nil, ErrInvalidAPIKey
+		}
+		return nil, err
+	}
+
 	if err := p.rateLimiter.Enforce(ctx, apiKey); err != nil {
 		return nil, err
 	}

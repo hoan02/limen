@@ -185,13 +185,13 @@ func (s *apiKeySchema) ToStorage(data limen.Model) map[string]any {
 		s.GetLastUsedAtField():            apiKey.LastUsedAt,
 	}
 
-	if apiKey.Permissions != nil {
+	if len(apiKey.Permissions) > 0 {
 		if json, err := json.Marshal(apiKey.Permissions); err == nil {
 			payload[s.GetPermissionsField()] = string(json)
 		}
 	}
 
-	if apiKey.Metadata != nil {
+	if len(apiKey.Metadata) > 0 {
 		if json, err := json.Marshal(apiKey.Metadata); err == nil {
 			payload[s.GetMetadataField()] = string(json)
 		}

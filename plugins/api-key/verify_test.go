@@ -54,6 +54,15 @@ func TestAPIKeyPlugin_Verify(t *testing.T) {
 			expectedError: ErrInvalidAPIKey,
 		},
 		{
+			name: "principal no longer exists",
+			prepare: func(t *testing.T, plugin *apiKeyPlugin, user *limen.User) string {
+				key := createTestAPIKey(t, plugin, user, "default", nil, nil)
+				plugin.RegisterPrincipalResolver(string(PrincipalTypeUser), &testPrincipalResolver{missing: true})
+				return key
+			},
+			expectedError: ErrInvalidAPIKey,
+		},
+		{
 			name: "disabled key",
 			prepare: func(t *testing.T, plugin *apiKeyPlugin, user *limen.User) string {
 				key := createTestAPIKey(t, plugin, user, "default", nil, nil)

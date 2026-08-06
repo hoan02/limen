@@ -394,20 +394,28 @@ func TestAPIKeyPlugin_Rotate_ReturnsNotFound(t *testing.T) {
 
 type testPrincipalResolver struct {
 	grantable Permissions
+	missing   bool
+	denied    bool
 }
 
-func (r *testPrincipalResolver) ResolvePrincipalID(
-	_ context.Context,
-	_ string,
-	userID any,
-) (any, error) {
+func (r *testPrincipalResolver) ResolvePrincipalID(_ context.Context, userID any) (any, error) {
 	return userID, nil
 }
 
-func (r *testPrincipalResolver) GrantablePermissions(
-	_ context.Context,
-	_ string,
-	_ any,
-) (map[string][]string, error) {
+func (r *testPrincipalResolver) HasPermission(_ context.Context, _ any, _ map[string][]string) error {
+	if r.denied {
+		return limen.ErrForbidden
+	}
+	return nil
+}
+
+func (r *testPrincipalResolver) GrantablePermissions(_ context.Context, _ any) (map[string][]string, error) {
 	return r.grantable, nil
+}
+
+func (r *testPrincipalResolver) EnsurePrincipalExists(_ context.Context, _ any) error {
+	if r.missing {
+		return limen.ErrRecordNotFound
+	}
+	return nil
 }

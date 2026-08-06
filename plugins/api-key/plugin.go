@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/thecodearcher/limen"
+	"github.com/thecodearcher/limen/access"
 )
 
 type apiKeyPlugin struct {
@@ -96,7 +97,7 @@ func (p *apiKeyPlugin) resolvePrincipalID(ctx context.Context, principalType Pri
 	if !ok {
 		return nil, limen.NewLimenError(fmt.Sprintf("principal resolver not found for type %s", principalType), http.StatusInternalServerError, nil)
 	}
-	return resolver.ResolvePrincipalID(ctx, string(principalType), userID)
+	return resolver.ResolvePrincipalID(ctx, userID)
 }
 
 func (p *apiKeyPlugin) grantablePrincipalPermissions(ctx context.Context, principalType PrincipalType, principalID any) (Permissions, error) {
@@ -104,7 +105,23 @@ func (p *apiKeyPlugin) grantablePrincipalPermissions(ctx context.Context, princi
 	if !ok {
 		return nil, limen.NewLimenError("principal resolver not found", http.StatusInternalServerError, nil)
 	}
-	return resolver.GrantablePermissions(ctx, string(principalType), principalID)
+	return resolver.GrantablePermissions(ctx, principalID)
+}
+
+func (p *apiKeyPlugin) ensurePrincipalExists(ctx context.Context, principalType PrincipalType, principalID any) error {
+	resolver, ok := p.principalResolvers[principalType]
+	if !ok {
+		return limen.NewLimenError("principal resolver not found", http.StatusInternalServerError, nil)
+	}
+	return resolver.EnsurePrincipalExists(ctx, principalID)
+}
+
+func (p *apiKeyPlugin) requirePrincipalPermission(ctx context.Context, principalType PrincipalType, principalID any, permissions access.Permissions) error {
+	resolver, ok := p.principalResolvers[principalType]
+	if !ok {
+		return limen.NewLimenError("principal resolver not found", http.StatusInternalServerError, nil)
+	}
+	return resolver.HasPermission(ctx, principalID, permissions)
 }
 
 func (p *apiKeyPlugin) GetProfile(id string) (*Profile, error) {

@@ -54,6 +54,10 @@ func (p *apiKeyPlugin) Create(ctx context.Context, user *limen.User, req *ApiKey
 		return nil, err
 	}
 
+	if err := p.requirePrincipalPermission(ctx, profile.PrincipalType, principalID, perms("api-key:create")); err != nil {
+		return nil, err
+	}
+
 	permissions, err := p.resolvePermissions(ctx, profile, principalID, req.Permissions)
 	if err != nil {
 		return nil, err
@@ -101,7 +105,7 @@ func (p *apiKeyPlugin) Get(ctx context.Context, user *limen.User, id any) (*ApiK
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
-	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
+	if err := p.ensureUserMayUseAPIKey(ctx, user, apiKey, perms("api-key:read")); err != nil {
 		return nil, err
 	}
 	return apiKey, nil
@@ -115,6 +119,10 @@ func (p *apiKeyPlugin) List(ctx context.Context, user *limen.User, profileId str
 
 	principalID, err := p.resolvePrincipalID(ctx, profile.PrincipalType, user.ID)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := p.requirePrincipalPermission(ctx, profile.PrincipalType, principalID, perms("api-key:read")); err != nil {
 		return nil, err
 	}
 
@@ -150,7 +158,7 @@ func (p *apiKeyPlugin) Update(ctx context.Context, user *limen.User, apiKeyID an
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
-	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
+	if err := p.ensureUserMayUseAPIKey(ctx, user, apiKey, perms("api-key:update")); err != nil {
 		return nil, err
 	}
 
@@ -201,7 +209,7 @@ func (p *apiKeyPlugin) Revoke(ctx context.Context, user *limen.User, apiKeyId an
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
-	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
+	if err := p.ensureUserMayUseAPIKey(ctx, user, apiKey, perms("api-key:revoke")); err != nil {
 		return err
 	}
 
@@ -217,7 +225,7 @@ func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId an
 	}
 
 	apiKey := apiKeyModel.(*ApiKey)
-	if err := p.ensureUserOwnsAPIKey(ctx, user, apiKey); err != nil {
+	if err := p.ensureUserMayUseAPIKey(ctx, user, apiKey, perms("api-key:update")); err != nil {
 		return nil, err
 	}
 
@@ -256,7 +264,7 @@ func (p *apiKeyPlugin) Rotate(ctx context.Context, user *limen.User, apiKeyId an
 	}, nil
 }
 
-func (p *apiKeyPlugin) ensureUserOwnsAPIKey(ctx context.Context, user *limen.User, apiKey *ApiKey) error {
+func (p *apiKeyPlugin) ensureUserMayUseAPIKey(ctx context.Context, user *limen.User, apiKey *ApiKey, permissions access.Permissions) error {
 	principalID, err := p.resolvePrincipalID(ctx, apiKey.PrincipalType, user.ID)
 	if err != nil {
 		return err
@@ -264,7 +272,7 @@ func (p *apiKeyPlugin) ensureUserOwnsAPIKey(ctx context.Context, user *limen.Use
 	if principalID != apiKey.PrincipalID {
 		return limen.ErrForbidden
 	}
-	return nil
+	return p.requirePrincipalPermission(ctx, apiKey.PrincipalType, apiKey.PrincipalID, permissions)
 }
 
 func resolveExpiresAt(expiresIn *int64) *time.Time {

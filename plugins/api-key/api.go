@@ -22,6 +22,11 @@ type API interface {
 	// Update changes an existing API key.
 	Update(ctx context.Context, user *limen.User, apiKeyID any, req *ApiKeyUpdateRequest) (*ApiKey, error)
 
+	// RegisterPrincipalResolver teaches the plugin about a principal type another
+	// plugin owns, so profiles can bind keys to it. Call it once limen.New has
+	// returned, when every plugin is registered.
+	RegisterPrincipalResolver(principalType string, r PrincipalResolver)
+
 	// Verify validates an API key and ensures it grants the required permissions.
 	Verify(ctx context.Context, key string, requiredPermissions access.Permissions) (*ApiKey, error)
 
