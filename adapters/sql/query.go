@@ -10,11 +10,15 @@ import (
 	"github.com/thecodearcher/limen"
 )
 
-func (a *Adapter) Create(ctx context.Context, tableName limen.SchemaTableName, data map[string]any) error {
+func (a *Adapter) Create(ctx context.Context, tableName limen.SchemaTableName, data map[string]any) (limen.DatabaseResult, error) {
 	if len(data) == 0 {
-		return fmt.Errorf("create: no data")
+		return limen.DatabaseResult{}, fmt.Errorf("create: no data")
 	}
-	cols := sortedKeys(data)
+	payload, err := normalizeWriteMap(data)
+	if err != nil {
+		return limen.DatabaseResult{}, err
+	}
+	cols := sortedKeys(payload)
 	quotedCols := make([]string, len(cols))
 	for i, c := range cols {
 		quotedCols[i] = a.quoteIdent(c)
@@ -28,8 +32,12 @@ func (a *Adapter) Create(ctx context.Context, tableName limen.SchemaTableName, d
 		a.quoteIdent(string(tableName)),
 		strings.Join(quotedCols, ", "),
 		strings.Join(namedPlaceholders, ", "))
-	_, err := a.getNamed().NamedExecContext(ctx, query, data)
-	return err
+	result, err := a.getNamed().NamedExecContext(ctx, query, payload)
+	if err != nil {
+		return limen.DatabaseResult{}, err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	return limen.DatabaseResult{RowsAffected: rowsAffected}, nil
 }
 
 func (a *Adapter) FindOne(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where, orderBy []limen.OrderBy) (map[string]any, error) {
@@ -57,9 +65,9 @@ func (a *Adapter) FindOne(ctx context.Context, tableName limen.SchemaTableName, 
 	if err != nil {
 		return nil, err
 	}
-	if a.db.DriverName() == "mysql" {
-		normalizeRow(dest)
-	}
+
+	normalizeRow(dest)
+
 	return dest, nil
 }
 
@@ -96,45 +104,76 @@ func (a *Adapter) FindMany(ctx context.Context, tableName limen.SchemaTableName,
 		if err := rows.MapScan(m); err != nil {
 			return nil, err
 		}
-		if a.db.DriverName() == "mysql" {
-			normalizeRow(m)
-		}
+		normalizeRow(m)
 		results = append(results, m)
 	}
 	return results, rows.Err()
 }
 
-func (a *Adapter) Update(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where, updates map[string]any) error {
+func (a *Adapter) Update(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where, updates map[string]any) (limen.DatabaseResult, error) {
 	if len(updates) == 0 {
-		return nil
+		return limen.DatabaseResult{}, nil
 	}
 
 	if len(conditions) == 0 {
-		return fmt.Errorf("update: conditions required to prevent accidental table-wide update")
+		return limen.DatabaseResult{}, fmt.Errorf("update: conditions required to prevent accidental table-wide update")
 	}
 	setParts := make([]string, 0, len(updates))
 	setArgs := make([]any, 0, len(updates))
 	for _, k := range sortedKeys(updates) {
-		setParts = append(setParts, a.quoteIdent(k)+" = ?")
-		setArgs = append(setArgs, updates[k])
+		part, arg, err := a.buildUpdateAssignment(k, updates[k])
+		if err != nil {
+			return limen.DatabaseResult{}, err
+		}
+		setParts = append(setParts, part)
+		setArgs = append(setArgs, arg)
 	}
 	whereSQL, whereArgs := a.buildWhere(conditions)
 	args := append(setArgs, whereArgs...)
 	query := "UPDATE " + a.quoteIdent(string(tableName)) + " SET " + strings.Join(setParts, ", ") + " WHERE " + whereSQL
 	query = a.rebind(query)
-	_, err := a.getExt().ExecContext(ctx, query, args...)
-	return err
+	result, err := a.getExt().ExecContext(ctx, query, args...)
+	if err != nil {
+		return limen.DatabaseResult{}, err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	return limen.DatabaseResult{RowsAffected: rowsAffected}, nil
 }
 
-func (a *Adapter) Delete(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) error {
+func (a *Adapter) buildUpdateAssignment(column string, value any) (string, any, error) {
+	quotedColumn := a.quoteIdent(column)
+	update, ok := value.(limen.ArithmeticUpdate)
+	if !ok {
+		normalized, err := normalizeWriteValue(value)
+		if err != nil {
+			return "", nil, fmt.Errorf("update column %q: %w", column, err)
+		}
+		return quotedColumn + " = ?", normalized, nil
+	}
+	if err := update.Validate(); err != nil {
+		return "", nil, fmt.Errorf("update column %q: %w", column, err)
+	}
+
+	delta := update.Value()
+	if delta < 0 {
+		return quotedColumn + " = " + quotedColumn + " - ?", -delta, nil
+	}
+	return quotedColumn + " = " + quotedColumn + " + ?", delta, nil
+}
+
+func (a *Adapter) Delete(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) (limen.DatabaseResult, error) {
 	if len(conditions) == 0 {
-		return fmt.Errorf("delete: conditions required to prevent accidental table-wide delete")
+		return limen.DatabaseResult{}, fmt.Errorf("delete: conditions required to prevent accidental table-wide delete")
 	}
 	whereSQL, args := a.buildWhere(conditions)
 	query := "DELETE FROM " + a.quoteIdent(string(tableName)) + " WHERE " + whereSQL
 	query = a.rebind(query)
-	_, err := a.getExt().ExecContext(ctx, query, args...)
-	return err
+	result, err := a.getExt().ExecContext(ctx, query, args...)
+	if err != nil {
+		return limen.DatabaseResult{}, err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	return limen.DatabaseResult{RowsAffected: rowsAffected}, nil
 }
 
 func (a *Adapter) Exists(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) (bool, error) {

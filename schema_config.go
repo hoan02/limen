@@ -2,8 +2,9 @@ package limen
 
 // PluginSchemaConfig represents customization for a plugin schema
 type PluginSchemaConfig struct {
-	TableName SchemaTableName        //  override table name
-	Fields    map[SchemaField]string // Map of logical field name -> actual column name
+	TableName        SchemaTableName        //  override table name
+	Fields           map[SchemaField]string // Map of logical field name -> actual column name
+	AdditionalFields AdditionalFieldsFunc
 }
 
 type PluginSchemaConfigOption func(*PluginSchemaConfig)
@@ -36,6 +37,11 @@ type SchemaConfig struct {
 	coreSchemaCustomizations map[SchemaName]PluginSchemaConfig
 	// Plugin schema customizations: PluginName -> SchemaName -> Config
 	pluginSchemas map[PluginName]map[SchemaName]PluginSchemaConfig
+	// Model transformers by logical schema name
+	modelTransformers ModelTransformers
+	// Resolved global public-ID configuration.
+	publicID            *PublicIDConfig
+	publicIDDisabledFor map[SchemaName]struct{}
 }
 
 type SchemaConfigOption func(*SchemaConfig)
@@ -66,6 +72,53 @@ func (c *SchemaConfig) GetIDColumnType() ColumnType {
 		return c.IDGenerator.GetColumnType()
 	}
 	return ColumnTypeInt64
+}
+
+// MatchesIDColumnType checks if the value matches the ID column type
+func (c *SchemaConfig) MatchesIDColumnType(value any) bool {
+	idType := c.GetIDColumnType()
+	switch idType {
+	case ColumnTypeString, ColumnTypeText, ColumnTypeUUID:
+		_, ok := value.(string)
+		return ok
+	case ColumnTypeInt, ColumnTypeInt32, ColumnTypeInt64:
+		switch value.(type) {
+		case int, int8, int16, int32, int64:
+			return true
+		case float64: // JSON numbers decode as float64 into `any`
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
+// NormalizeIDValue converts a JSON-decoded identifier back to the configured
+// ID column type; other values pass through unchanged.
+func (c *SchemaConfig) NormalizeIDValue(value any) any {
+	v, ok := value.(float64)
+	if !ok {
+		return value
+	}
+
+	switch c.GetIDColumnType() {
+	case ColumnTypeInt, ColumnTypeInt32, ColumnTypeInt64:
+		return int64(v)
+	default:
+		return value
+	}
+}
+
+func (c *SchemaConfig) getPublicIDConfig(schemaName SchemaName) (*PublicIDConfig, bool) {
+	if c.publicID == nil || c.publicID.Disabled {
+		return nil, false
+	}
+	if _, disabled := c.publicIDDisabledFor[schemaName]; disabled {
+		return nil, false
+	}
+	return c.publicID, true
 }
 
 // getCoreSchemaCustomizationField returns the customized column name for a core schema field if set

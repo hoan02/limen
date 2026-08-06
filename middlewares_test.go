@@ -18,7 +18,7 @@ func TestMiddlewareRequireSession_ValidSession(t *testing.T) {
 
 	var capturedSession *ValidatedSession
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s, err := GetCurrentSessionFromCtx(r)
+		s, err := GetCurrentSessionFromCtx(r.Context())
 		if err == nil {
 			capturedSession = s
 		}

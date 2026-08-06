@@ -40,7 +40,7 @@ func (h *limenHandlers) RegisterRoutes(routeBuilder *RouteBuilder) {
 }
 
 func (h *limenHandlers) GetSession(w http.ResponseWriter, r *http.Request) {
-	session, err := GetCurrentSessionFromCtx(r)
+	session, err := GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.core.Cookies().DeleteSessionCookie(w)
 		h.responder.Error(w, r, NewLimenError(err.Error(), http.StatusUnauthorized, nil))
@@ -51,7 +51,7 @@ func (h *limenHandlers) GetSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *limenHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
-	session, err := GetCurrentSessionFromCtx(r)
+	session, err := GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -67,7 +67,7 @@ func (h *limenHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *limenHandlers) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
-	session, err := GetCurrentSessionFromCtx(r)
+	session, err := GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -83,8 +83,8 @@ func (h *limenHandlers) RevokeAllSessions(w http.ResponseWriter, r *http.Request
 }
 
 func (h *limenHandlers) VerifyEmail(w http.ResponseWriter, r *http.Request) {
-	body := ValidateJSON(w, r, h.responder, func(v *Validator, data map[string]any) *Validator {
-		return v.RequiredString("token", data["token"])
+	body := ValidateRequest(w, r, h.responder, func(v *Validator) {
+		v.Field("token").Required()
 	})
 	if body == nil {
 		return
@@ -100,7 +100,7 @@ func (h *limenHandlers) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *limenHandlers) RequestEmailVerification(w http.ResponseWriter, r *http.Request) {
-	session, err := GetCurrentSessionFromCtx(r)
+	session, err := GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, err)
 		return
@@ -118,7 +118,7 @@ func (h *limenHandlers) RequestEmailVerification(w http.ResponseWriter, r *http.
 }
 
 func (h *limenHandlers) SignOut(w http.ResponseWriter, r *http.Request) {
-	session, err := GetCurrentSessionFromCtx(r)
+	session, err := GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		h.responder.Error(w, r, NewLimenError(err.Error(), http.StatusUnauthorized, nil))
 		return

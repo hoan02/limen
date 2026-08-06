@@ -1,6 +1,50 @@
 package limen
 
+import "cmp"
+
 // --- Schema config (top-level) ---
+
+// WithModelTransformers configures model transformers by logical schema name.
+func WithModelTransformers(transformers ModelTransformers) SchemaConfigOption {
+	return func(config *SchemaConfig) {
+		config.modelTransformers = transformers
+	}
+}
+
+// WithPublicIDs configures global public identifiers.
+func WithPublicIDs(global PublicIDConfig) SchemaConfigOption {
+	return func(config *SchemaConfig) {
+		resolvedGlobal := defaultPublicIDConfig(global)
+
+		config.publicID = resolvedGlobal
+		config.publicIDDisabledFor = make(map[SchemaName]struct{}, len(resolvedGlobal.DisabledFor))
+		for _, schemaName := range resolvedGlobal.DisabledFor {
+			config.publicIDDisabledFor[schemaName] = struct{}{}
+		}
+	}
+}
+
+func defaultPublicIDConfig(config PublicIDConfig) *PublicIDConfig {
+	resolved := config
+	resolved.ColumnName = cmp.Or(resolved.ColumnName, string(SchemaPublicIDField))
+	resolved.field = SchemaPublicIDField
+	resolved.ColumnType = cmp.Or(resolved.ColumnType, ColumnTypeString)
+	resolved.ResponseField = cmp.Or(resolved.ResponseField, string(SchemaIDField))
+	if resolved.Encoder == nil {
+		resolved.Encoder = func(_ SchemaName, value string) string { return value }
+	}
+	if resolved.Decoder == nil {
+		resolved.Decoder = func(_ SchemaName, publicID string) (string, error) { return publicID, nil }
+	}
+	defaultPublicIDDisabledFor := []SchemaName{
+		CoreSchemaAccounts,
+		CoreSchemaSessions,
+		CoreSchemaVerifications,
+		CoreSchemaRateLimits,
+	}
+	resolved.DisabledFor = append(resolved.DisabledFor, defaultPublicIDDisabledFor...)
+	return &resolved
+}
 
 // WithSchemaAdditionalFields sets the global additional fields function
 func WithSchemaAdditionalFields(fn AdditionalFieldsFunc) SchemaConfigOption {
@@ -81,6 +125,13 @@ func WithPluginSchema(pluginName PluginName, schemaName SchemaName, opts ...Plug
 			opt(&config)
 		}
 		c.pluginSchemas[pluginName][schemaName] = config
+	}
+}
+
+// WithPluginAdditionalFields sets the additional fields for a plugin schema
+func WithPluginAdditionalFields(fn AdditionalFieldsFunc) PluginSchemaConfigOption {
+	return func(c *PluginSchemaConfig) {
+		c.AdditionalFields = fn
 	}
 }
 

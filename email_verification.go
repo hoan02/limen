@@ -37,6 +37,10 @@ func (c *LimenCore) RequestEmailVerification(ctx context.Context, user *User, sh
 
 // CreateEmailVerification creates a new verification token for the user.
 func (c *LimenCore) CreateEmailVerification(ctx context.Context, user *User) (*Verification, error) {
+	normalizedUser := *user
+	normalizedUser.Email = NormalizeEmail(user.Email)
+	user = &normalizedUser
+
 	token, err := c.generateEmailVerificationToken(user)
 	if err != nil {
 		return nil, err
@@ -68,7 +72,7 @@ func (c *LimenCore) VerifyEmail(ctx context.Context, token string) error {
 	return c.WithTransaction(ctx, func(ctx context.Context) error {
 		if err := c.DBAction.UpdateUser(ctx, &User{EmailVerifiedAt: &now},
 			[]Where{
-				Eq(c.Schema.User.GetEmailField(), identifier),
+				Eq(c.Schema.User.GetEmailField(), NormalizeEmail(identifier)),
 			}); err != nil {
 			return err
 		}

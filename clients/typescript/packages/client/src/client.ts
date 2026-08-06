@@ -1,15 +1,17 @@
 import type { ClientOverrides } from "./build-tree";
 import { buildClientTree } from "./build-tree";
 import { DEFAULT_ENVELOPE_CONFIG } from "./constants";
-import type { RouteContext } from "./context";
+import type { AnyRouteContext, RouteContext } from "./context";
 import type { AnyClientPlugin } from "./define-plugin";
 import { Fetcher } from "./fetcher";
-import { normalizeBasePath, stripTrailingSlash } from "./helpers";
+import { ensureLeadingSlash, kebabToCamel, normalizeBasePath, stripTrailingSlash } from "./helpers";
 import { HookRunner } from "./hooks";
 import { defaultSessionParse } from "./normalize";
 import type { FetchInit } from "./plugin";
-import { coreClientPlugin, createSessionHydrator } from "./routes";
+import { coreClientPlugin } from "./routes";
 import { createSessionStore } from "./session-store";
+import type { StoreMap } from "./stores";
+import { collectStores, createStoreRegistry, storeAtoms } from "./stores";
 import type { AuthClient, ClientFetchOptions, CreateAuthClientOptions, EnvelopeConfig, RedirectFn } from "./types";
 
 export function createAuthClient<const Plugins extends readonly AnyClientPlugin[] = readonly [], TFields = unknown>(
@@ -30,11 +32,14 @@ export function createAuthClient<const Plugins extends readonly AnyClientPlugin[
   const baseFetch = <T>(path: string, init?: FetchInit) => fetcher.fetch<T>(path, init);
 
   const store = createSessionStore<TFields>({
-    hydrator: createSessionHydrator<TFields>({ fetch: baseFetch, parseSession }),
+    fetch: baseFetch,
+    parseSession,
     crossTabSync: opts.crossTabSync !== false,
     refetchOnWindowFocus: opts.refetchOnWindowFocus !== false,
     ...(opts.initialSession !== undefined ? { initialSession: opts.initialSession } : {}),
   });
+
+  let stores: StoreMap = {};
 
   const ctx: RouteContext<TFields> = {
     fetch: baseFetch,
@@ -42,22 +47,23 @@ export function createAuthClient<const Plugins extends readonly AnyClientPlugin[
     parseSession,
     setSession: (session) => store.setData(session),
     refetchSession: () => store.refetch(),
-    currentSession: () => store.$session.get().data,
+    currentSession: () => store.$state.get().data,
     store,
+    stores: createStoreRegistry(() => stores),
   };
 
-  const api = buildClientTree({
-    plugins,
-    ctx,
-    fetcher,
-    overrides: opts.overrides as ClientOverrides,
-  });
+  const overrides = opts.overrides as ClientOverrides;
+  const contexts = new Map(plugins.map((plugin) => [plugin, scopeContext(ctx, fetcher, plugin, overrides)]));
+
+  stores = collectStores(plugins, contexts, { session: store });
+
+  const api = buildClientTree({ plugins, contexts, stores });
 
   const client: Record<string, unknown> = {
     baseURL,
     basePath,
     ...api,
-    $session: store.$session,
+    ...storeAtoms(stores),
   };
 
   return client as AuthClient<Plugins, TFields>;
@@ -89,5 +95,26 @@ function resolveRedirect(redirect: RedirectFn | undefined): RedirectFn {
       return true;
     }
     return false;
+  };
+}
+
+/** Scope a context's `fetch` to one plugin's base path (after client `overrides`). */
+function scopeContext(
+  ctx: AnyRouteContext,
+  fetcher: Fetcher,
+  plugin: AnyClientPlugin,
+  overrides: ClientOverrides,
+): RouteContext {
+  const defaultBase = normalizeBasePath(plugin.basePath ?? "");
+  const overrideBase = overrides?.[kebabToCamel(plugin.id)]?.basePath;
+  const resolvedBase = normalizeBasePath(overrideBase ?? plugin.basePath ?? "");
+  return {
+    ...ctx,
+    fetch: <T>(path: string, init?: FetchInit) => {
+      const absolute = init?.absolute === true;
+      const requestPath = (absolute ? "" : resolvedBase) + ensureLeadingSlash(path);
+      const routePath = (absolute ? "" : defaultBase) + ensureLeadingSlash(path);
+      return fetcher.fetch<T>(requestPath, init, routePath);
+    },
   };
 }

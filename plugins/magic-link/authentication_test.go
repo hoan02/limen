@@ -24,13 +24,15 @@ func TestRequestMagicLink_RequiresEmail(t *testing.T) {
 func TestVerifyMagicLink_CreatesUserLazilyWhenAutoCreateEnabled(t *testing.T) {
 	t.Parallel()
 
-	var token string
+	var token, sentEmail string
 	_, plugin := newTestLimenAndPlugin(t, WithSendMagicLink(func(msg MagicLinkMessage) {
 		token = msg.Token
+		sentEmail = msg.Email
 	}))
 
-	_, err := plugin.RequestMagicLink(context.Background(), "lazy@test.com")
+	_, err := plugin.RequestMagicLink(context.Background(), " LAZY@TEST.COM ")
 	require.NoError(t, err)
+	assert.Equal(t, "lazy@test.com", sentEmail)
 
 	_, err = plugin.dbAction.FindUserByEmail(context.Background(), "lazy@test.com")
 	require.ErrorIs(t, err, limen.ErrRecordNotFound)
