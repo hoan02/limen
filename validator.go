@@ -468,20 +468,20 @@ func (f *FieldValidator) Boolean() *FieldValidator {
 	})
 }
 
-// Min requires a number greater than or equal to min.
-func (f *FieldValidator) Min(min float64) *FieldValidator {
+// Min requires a number greater than or equal to minVal.
+func (f *FieldValidator) Min(minVal float64) *FieldValidator {
 	return f.apply(func() {
-		if n, ok := f.number(); ok && n < min {
-			f.fail(fmt.Sprintf("must be at least %v", min))
+		if n, ok := f.number(); ok && n < minVal {
+			f.fail(fmt.Sprintf("must be at least %v", minVal))
 		}
 	})
 }
 
-// Max requires a number less than or equal to max.
-func (f *FieldValidator) Max(max float64) *FieldValidator {
+// Max requires a number less than or equal to maxVal.
+func (f *FieldValidator) Max(maxVal float64) *FieldValidator {
 	return f.apply(func() {
-		if n, ok := f.number(); ok && n > max {
-			f.fail(fmt.Sprintf("must be at most %v", max))
+		if n, ok := f.number(); ok && n > maxVal {
+			f.fail(fmt.Sprintf("must be at most %v", maxVal))
 		}
 	})
 }

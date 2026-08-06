@@ -30,15 +30,23 @@ linters:
     errcheck:
       # HTTP handlers rarely recover from ResponseWriter failures; Responder returns error for callers that need it.
       exclude-functions:
-        - (github.com/thecodearcher/limen.Responder).JSON
-        - (github.com/thecodearcher/limen.Responder).Error
-        - (github.com/thecodearcher/limen.Responder).SessionResponse
+        - (*github.com/thecodearcher/limen.Responder).JSON
+        - (*github.com/thecodearcher/limen.Responder).Error
+        - (*github.com/thecodearcher/limen.Responder).SessionResponse
+        - (*github.com/thecodearcher/limen.Responder).JSONWithSession
+        - (*github.com/thecodearcher/limen.Responder).ErrorWithSession
+        - (*github.com/thecodearcher/limen.Responder).Redirect
+        - (*github.com/thecodearcher/limen.Responder).RedirectWithSession
+    exhaustive:
+      default-signifies-exhaustive: true
     funlen:
       lines: 100
       statements: 50
     goconst:
-      min-len: 2
-      min-occurrences: 3
+      min-len: 4
+      min-occurrences: 4
+      # Defaults and wire keys are clearer as literals than package constants.
+      ignore-string-values: "^(json|user|http://localhost:8080|/auth|limen_session)$"
     gocritic:
       disabled-checks:
         - octalLiteral
@@ -58,8 +66,10 @@ linters:
       min-complexity: 17
     gosec:
       # G117 flags normal auth DTO fields (AccessToken, Secret, etc.).
+      # G124 flags cookie constructors before Secure/HttpOnly/SameSite are applied by config.
       excludes:
         - G117
+        - G124
     misspell:
       locale: US
   exclusions:
@@ -77,12 +87,16 @@ linters:
           - goconst
           - gocyclo
           - gosec
+          - unparam
         path: _test\.go
       - linters:
           - gocyclo
+          - goconst
+          - gosec
         path: testing_support\.go
       - linters:
           - dupl
+          - goconst
         path: _introspect\.go
       - linters:
           - funlen

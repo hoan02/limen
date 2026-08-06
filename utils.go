@@ -237,7 +237,7 @@ func addTimestampFields(fields []ColumnDefinition) []ColumnDefinition {
 		IsPrimaryKey: false,
 		DefaultValue: string(DatabaseDefaultValueNow),
 		Tags: map[string]string{
-			"json": "created_at",
+			"json": string(SchemaCreatedAtField),
 		},
 	}, ColumnDefinition{
 		Name:         string(SchemaUpdatedAtField),
@@ -246,7 +246,7 @@ func addTimestampFields(fields []ColumnDefinition) []ColumnDefinition {
 		IsNullable:   false,
 		IsPrimaryKey: false,
 		Tags: map[string]string{
-			"json": "updated_at",
+			"json": string(SchemaUpdatedAtField),
 		},
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -155,7 +156,11 @@ func testApplyArithmeticUpdate(current any, update ArithmeticUpdate) (any, error
 	case int:
 		return value + int(delta), nil
 	case int32:
-		return value + int32(delta), nil
+		sum := int64(value) + delta
+		if sum > math.MaxInt32 || sum < math.MinInt32 {
+			return nil, fmt.Errorf("arithmetic update overflows int32")
+		}
+		return int32(sum), nil
 	case int64:
 		return value + delta, nil
 	}
@@ -279,17 +284,17 @@ func testMatchesSingle(row map[string]any, c Where) bool {
 	case OpNe:
 		return !testValuesEqual(val, c.Value)
 	case OpLt:
-		cmp, ok := testCompareValues(val, c.Value)
-		return ok && cmp < 0
+		order, ok := testCompareValues(val, c.Value)
+		return ok && order < 0
 	case OpLte:
-		cmp, ok := testCompareValues(val, c.Value)
-		return ok && cmp <= 0
+		order, ok := testCompareValues(val, c.Value)
+		return ok && order <= 0
 	case OpGt:
-		cmp, ok := testCompareValues(val, c.Value)
-		return ok && cmp > 0
+		order, ok := testCompareValues(val, c.Value)
+		return ok && order > 0
 	case OpGte:
-		cmp, ok := testCompareValues(val, c.Value)
-		return ok && cmp >= 0
+		order, ok := testCompareValues(val, c.Value)
+		return ok && order >= 0
 	case OpContains:
 		return strings.Contains(fmt.Sprint(val), fmt.Sprint(c.Value))
 	case OpStartsWith:
@@ -436,14 +441,14 @@ func testSortRows(rows []map[string]any, orderBy []OrderBy) {
 			if ob.Column == "" {
 				continue
 			}
-			cmp, ok := testCompareValues(a[ob.Column], b[ob.Column])
-			if !ok || cmp == 0 {
+			order, ok := testCompareValues(a[ob.Column], b[ob.Column])
+			if !ok || order == 0 {
 				continue
 			}
 			if ob.Direction == OrderByDesc {
-				return -cmp
+				return -order
 			}
-			return cmp
+			return order
 		}
 		return 0
 	})
