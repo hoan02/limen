@@ -109,6 +109,9 @@ For full configuration options, usage, and plugin APIs, visit **[limenauth.dev](
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
+Curious what's being built, what's open for contribution, and what's out of scope? See [ROADMAP.md](./ROADMAP.md). If you're planning to contribute, check there and open an issue first.
+
+
 ## Security
 
 Found a security issue? Please **do not** open a public issue. Email
@@ -118,3 +121,5 @@ Found a security issue? Please **do not** open a public issue. Email
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
+
+
