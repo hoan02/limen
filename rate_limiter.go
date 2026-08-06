@@ -109,6 +109,9 @@ func (r *rateLimiter) findApplicableRule(req *http.Request) *RateLimitRule {
 		if pathMatcher(req, rule.pathRegex) {
 			if rule.limitProvider != nil {
 				limit, window := rule.limitProvider(req)
+				if limit == 0 {
+					break
+				}
 				return NewRateLimitRule(rule.path, limit, window)
 			}
 			return rule

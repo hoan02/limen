@@ -3,9 +3,11 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/thecodearcher/limen"
 
@@ -19,6 +21,7 @@ func setupTestDB(t *testing.T) *Adapter {
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS "test_items" (
@@ -41,12 +44,13 @@ func TestCreate_And_FindOne(t *testing.T) {
 	adapter := setupTestDB(t)
 	ctx := context.Background()
 
-	err := adapter.Create(ctx, "test_items", map[string]any{
+	dbResult, err := adapter.Create(ctx, "test_items", map[string]any{
 		"name":  "Alice",
 		"email": "alice@example.com",
 		"age":   30,
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	result, err := adapter.FindOne(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
@@ -75,7 +79,7 @@ func TestFindMany(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"Alice", "Bob", "Charlie"} {
-		err := adapter.Create(ctx, "test_items", map[string]any{"name": name, "email": name + "@test.com"})
+		_, err := adapter.Create(ctx, "test_items", map[string]any{"name": name, "email": name + "@test.com"})
 		assert.NoError(t, err)
 	}
 
@@ -127,13 +131,128 @@ func TestUpdate(t *testing.T) {
 
 	adapter.Create(ctx, "test_items", map[string]any{"name": "Alice", "email": "old@test.com"})
 
-	err := adapter.Update(ctx, "test_items", []limen.Where{
+	dbResult, err := adapter.Update(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "Alice"),
 	}, map[string]any{"email": "new@test.com"})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	result, _ := adapter.FindOne(ctx, "test_items", []limen.Where{limen.Eq("name", "Alice")}, nil)
 	assert.Equal(t, "new@test.com", result["email"])
+}
+
+func TestCreateUpdate_MarshalsMapValues(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { db.Close() })
+
+	_, err = db.Exec(`CREATE TABLE "sessions" (
+		"id" INTEGER PRIMARY KEY AUTOINCREMENT,
+		"token" TEXT NOT NULL,
+		"metadata" TEXT
+	)`)
+	require.NoError(t, err)
+
+	adapter := NewSQLite(db)
+	ctx := t.Context()
+
+	_, err = adapter.Create(ctx, "sessions", map[string]any{
+		"token": "t1",
+		"metadata": map[string]any{
+			"active_organization_id": 23,
+		},
+	})
+	require.NoError(t, err)
+
+	row, err := adapter.FindOne(ctx, "sessions", []limen.Where{limen.Eq("token", "t1")}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"active_organization_id":23}`, row["metadata"])
+
+	_, err = adapter.Update(ctx, "sessions", []limen.Where{
+		limen.Eq("token", "t1"),
+	}, map[string]any{
+		"metadata": map[string]any{"active_organization_id": 24, "ip": "::1"},
+	})
+	require.NoError(t, err)
+
+	row, err = adapter.FindOne(ctx, "sessions", []limen.Where{limen.Eq("token", "t1")}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"active_organization_id":24,"ip":"::1"}`, row["metadata"])
+}
+
+func TestUpdate_MixesArithmeticAndAssignments(t *testing.T) {
+	t.Parallel()
+
+	adapter := setupTestDB(t)
+	ctx := t.Context()
+	_, err := adapter.Create(ctx, "test_items", map[string]any{
+		"name":   "Alice",
+		"age":    10,
+		"status": "active",
+	})
+	require.NoError(t, err)
+
+	_, err = adapter.Update(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "Alice"),
+	}, map[string]any{
+		"age":    limen.IncrementBy(5),
+		"status": "updated",
+	})
+	require.NoError(t, err)
+
+	_, err = adapter.Update(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "Alice"),
+	}, map[string]any{
+		"age": limen.DecrementBy(3),
+	})
+	require.NoError(t, err)
+
+	result, err := adapter.FindOne(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "Alice"),
+	}, nil)
+	require.NoError(t, err)
+	assert.EqualValues(t, 12, result["age"])
+	assert.Equal(t, "updated", result["status"])
+}
+
+func TestUpdate_ConcurrentIncrements(t *testing.T) {
+	t.Parallel()
+
+	adapter := setupTestDB(t)
+	ctx := t.Context()
+	_, err := adapter.Create(ctx, "test_items", map[string]any{
+		"name": "counter",
+		"age":  0,
+	})
+	require.NoError(t, err)
+
+	const increments = 50
+	var wg sync.WaitGroup
+	errs := make(chan error, increments)
+	for range increments {
+		wg.Go(func() {
+			_, err := adapter.Update(ctx, "test_items", []limen.Where{
+				limen.Eq("name", "counter"),
+			}, map[string]any{
+				"age": limen.IncrementBy(1),
+			})
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	result, err := adapter.FindOne(ctx, "test_items", []limen.Where{
+		limen.Eq("name", "counter"),
+	}, nil)
+	require.NoError(t, err)
+	assert.EqualValues(t, increments, result["age"])
 }
 
 func TestDelete(t *testing.T) {
@@ -144,10 +263,11 @@ func TestDelete(t *testing.T) {
 
 	adapter.Create(ctx, "test_items", map[string]any{"name": "ToDelete"})
 
-	err := adapter.Delete(ctx, "test_items", []limen.Where{
+	dbResult, err := adapter.Delete(ctx, "test_items", []limen.Where{
 		limen.Eq("name", "ToDelete"),
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dbResult.RowsAffected)
 
 	_, err = adapter.FindOne(ctx, "test_items", []limen.Where{limen.Eq("name", "ToDelete")}, nil)
 	assert.ErrorIs(t, err, limen.ErrRecordNotFound)
@@ -199,7 +319,7 @@ func TestTransaction_Commit(t *testing.T) {
 	assert.NoError(t, err)
 
 	txAdapter := tx.(*Adapter)
-	err = txAdapter.Create(ctx, "test_items", map[string]any{"name": "InTx"})
+	_, err = txAdapter.Create(ctx, "test_items", map[string]any{"name": "InTx"})
 	assert.NoError(t, err)
 
 	err = tx.Commit()
@@ -268,7 +388,7 @@ func TestUpdate_RequiresConditions(t *testing.T) {
 	adapter := setupTestDB(t)
 	ctx := context.Background()
 
-	err := adapter.Update(ctx, "test_items", nil, map[string]any{"name": "bad"})
+	_, err := adapter.Update(ctx, "test_items", nil, map[string]any{"name": "bad"})
 	assert.Error(t, err)
 }
 
@@ -278,6 +398,6 @@ func TestDelete_RequiresConditions(t *testing.T) {
 	adapter := setupTestDB(t)
 	ctx := context.Background()
 
-	err := adapter.Delete(ctx, "test_items", nil)
+	_, err := adapter.Delete(ctx, "test_items", nil)
 	assert.Error(t, err)
 }

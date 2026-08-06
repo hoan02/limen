@@ -26,6 +26,15 @@ func NewRateLimitRule(path string, maxRequests int, window time.Duration) *RateL
 	}
 }
 
+func NewRateLimitRuleWithMethod(method string, path string, maxRequests int, window time.Duration) *RateLimitRule {
+	return NewRateLimitRuleWithLimitProvider(path, func(req *http.Request) (int, time.Duration) {
+		if req.Method == method {
+			return maxRequests, window
+		}
+		return 0, 0
+	})
+}
+
 func NewRateLimitRuleWithLimitProvider(path string, limitProvider LimitProvider) *RateLimitRule {
 	return &RateLimitRule{
 		enabled:       true,

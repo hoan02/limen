@@ -128,3 +128,41 @@ func TestWithTransaction_ContextPropagation(t *testing.T) {
 
 	require.NoError(t, err)
 }
+
+func TestWithTransaction_NestedJoinsExisting(t *testing.T) {
+	t.Parallel()
+
+	l, adapter := newTestLimenWithTxAdapter(t)
+
+	var outerTx, innerTx DatabaseTx
+	err := l.core.WithTransaction(context.Background(), func(ctx context.Context) error {
+		outerTx = getTxFromContext(ctx)
+		return l.core.WithTransaction(ctx, func(nestedCtx context.Context) error {
+			innerTx = getTxFromContext(nestedCtx)
+			return nil
+		})
+	})
+
+	require.NoError(t, err)
+	assert.NotNil(t, outerTx)
+	assert.Same(t, outerTx, innerTx, "nested WithTransaction should reuse the outer transaction")
+	assert.True(t, adapter.committed)
+	assert.False(t, adapter.rolledBack)
+}
+
+func TestWithTransaction_NestedErrorRollsBackOuter(t *testing.T) {
+	t.Parallel()
+
+	l, adapter := newTestLimenWithTxAdapter(t)
+	testErr := errors.New("nested failure")
+
+	err := l.core.WithTransaction(context.Background(), func(ctx context.Context) error {
+		return l.core.WithTransaction(ctx, func(context.Context) error {
+			return testErr
+		})
+	})
+
+	assert.ErrorIs(t, err, testErr)
+	assert.True(t, adapter.rolledBack)
+	assert.False(t, adapter.committed)
+}

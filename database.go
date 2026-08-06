@@ -2,15 +2,21 @@ package limen
 
 import (
 	"context"
+	"fmt"
 	"strings"
 )
 
+// DatabaseResult reports the outcome of a database write operation.
+type DatabaseResult struct {
+	RowsAffected int64
+}
+
 type DatabaseAdapter interface {
-	Create(ctx context.Context, tableName SchemaTableName, data map[string]any) error
+	Create(ctx context.Context, tableName SchemaTableName, data map[string]any) (DatabaseResult, error)
 	FindOne(ctx context.Context, tableName SchemaTableName, conditions []Where, orderBy []OrderBy) (map[string]any, error)
 	FindMany(ctx context.Context, tableName SchemaTableName, conditions []Where, options *QueryOptions) ([]map[string]any, error)
-	Update(ctx context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) error
-	Delete(ctx context.Context, tableName SchemaTableName, conditions []Where) error
+	Update(ctx context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) (DatabaseResult, error)
+	Delete(ctx context.Context, tableName SchemaTableName, conditions []Where) (DatabaseResult, error)
 	Exists(ctx context.Context, tableName SchemaTableName, conditions []Where) (bool, error)
 	Count(ctx context.Context, tableName SchemaTableName, conditions []Where) (int64, error)
 }
@@ -25,6 +31,41 @@ type DatabaseTx interface {
 // TransactionalAdapter is implemented by adapters that support transactions
 type TransactionalAdapter interface {
 	BeginTx(ctx context.Context) (DatabaseTx, error)
+}
+
+// ArithmeticUpdate represents an atomic numeric adjustment in an Update payload.
+type ArithmeticUpdate struct {
+	value int64
+	valid bool
+}
+
+// IncrementBy creates an update that atomically adds amount to a numeric column.
+func IncrementBy(amount int64) ArithmeticUpdate {
+	return ArithmeticUpdate{
+		value: amount,
+		valid: amount > 0,
+	}
+}
+
+// DecrementBy creates an update that atomically subtracts amount from a numeric column.
+func DecrementBy(amount int64) ArithmeticUpdate {
+	return ArithmeticUpdate{
+		value: -amount,
+		valid: amount > 0,
+	}
+}
+
+// Value returns the signed amount to apply to the current column value.
+func (u ArithmeticUpdate) Value() int64 {
+	return u.value
+}
+
+// Validate checks that the arithmetic update was created with a positive amount.
+func (u ArithmeticUpdate) Validate() error {
+	if !u.valid {
+		return fmt.Errorf("arithmetic update amount must be greater than zero")
+	}
+	return nil
 }
 
 // Where represents a typed condition for database queries

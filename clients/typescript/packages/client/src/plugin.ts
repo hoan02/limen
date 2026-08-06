@@ -1,5 +1,5 @@
 import type { KebabToCamel } from "./type-utils";
-import type { HTTPMethod } from "./types";
+import type { HTTPMethod, QueryParams } from "./types";
 
 /**
  * Route filter for hooks. Matches the stable route path, so client overrides do
@@ -63,7 +63,7 @@ export type FetchInit = {
   /** JSON body. The fetcher stringifies. */
   body?: unknown;
   /** Appended as `?k=v` query string. */
-  query?: Record<string, string>;
+  query?: QueryParams;
   /**
    * Headers merged into the request, on top of the default `Content-Type` /
    * `Accept`. A per-request value overrides the client default.

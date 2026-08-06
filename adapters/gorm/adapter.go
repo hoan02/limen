@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/thecodearcher/limen"
 )
@@ -61,9 +62,10 @@ func (a *Adapter) Rollback() error {
 	return err
 }
 
-func (a *Adapter) Create(ctx context.Context, tableName limen.SchemaTableName, data map[string]any) error {
+func (a *Adapter) Create(ctx context.Context, tableName limen.SchemaTableName, data map[string]any) (limen.DatabaseResult, error) {
 	db := a.getDB()
-	return db.WithContext(ctx).Table(string(tableName)).Create(data).Error
+	result := db.WithContext(ctx).Table(string(tableName)).Create(data)
+	return limen.DatabaseResult{RowsAffected: result.RowsAffected}, result.Error
 }
 
 func (a *Adapter) FindOne(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where, orderBy []limen.OrderBy) (map[string]any, error) {
@@ -104,18 +106,52 @@ func (a *Adapter) FindMany(ctx context.Context, tableName limen.SchemaTableName,
 	return results, a.formatError(err)
 }
 
-func (a *Adapter) Update(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where, updates map[string]any) error {
+func (a *Adapter) Update(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where, updates map[string]any) (limen.DatabaseResult, error) {
+	payload, err := buildUpdatePayload(updates)
+	if err != nil {
+		return limen.DatabaseResult{}, err
+	}
+
 	db := a.getDB()
 	query := db.WithContext(ctx).Table(string(tableName))
 	query = a.applyConditions(query, conditions)
-	return query.Updates(updates).Error
+	result := query.Updates(payload)
+	return limen.DatabaseResult{RowsAffected: result.RowsAffected}, result.Error
 }
 
-func (a *Adapter) Delete(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) error {
+func buildUpdatePayload(updates map[string]any) (map[string]any, error) {
+	payload := make(map[string]any, len(updates))
+	for column, value := range updates {
+		update, ok := value.(limen.ArithmeticUpdate)
+		if !ok {
+			payload[column] = value
+			continue
+		}
+		if err := update.Validate(); err != nil {
+			return nil, fmt.Errorf("update column %q: %w", column, err)
+		}
+
+		operator := "+"
+		amount := update.Value()
+		if amount < 0 {
+			operator = "-"
+			amount = -amount
+		}
+		payload[column] = gorm.Expr(
+			"? "+operator+" ?",
+			clause.Column{Name: column},
+			amount,
+		)
+	}
+	return payload, nil
+}
+
+func (a *Adapter) Delete(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) (limen.DatabaseResult, error) {
 	db := a.getDB()
 	query := db.WithContext(ctx).Table(string(tableName))
 	query = a.applyConditions(query, conditions)
-	return query.Delete(nil).Error
+	result := query.Delete(nil)
+	return limen.DatabaseResult{RowsAffected: result.RowsAffected}, result.Error
 }
 
 func (a *Adapter) Exists(ctx context.Context, tableName limen.SchemaTableName, conditions []limen.Where) (bool, error) {

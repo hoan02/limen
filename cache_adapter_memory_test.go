@@ -185,3 +185,42 @@ func TestMemoryCacheStore_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestMemoryCacheStore_IncrementIsAtomic(t *testing.T) {
+	t.Parallel()
+
+	store := NewMemoryCacheStore()
+	ctx := context.Background()
+
+	var group sync.WaitGroup
+	for range 100 {
+		group.Go(func() {
+			_, err := store.Increment(ctx, "counter", 1)
+			assert.NoError(t, err)
+		})
+	}
+	group.Wait()
+
+	value, err := store.Get(ctx, "counter")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("100"), value)
+}
+
+func TestMemoryCacheStore_IncrementPreservesExpiry(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		store := NewMemoryCacheStore()
+		ctx := context.Background()
+
+		_, err := store.Increment(ctx, "counter", 1)
+		require.NoError(t, err)
+		require.NoError(t, store.SetExpiry(ctx, "counter", time.Millisecond))
+		_, err = store.Increment(ctx, "counter", 1)
+		require.NoError(t, err)
+
+		time.Sleep(2 * time.Millisecond)
+		_, err = store.Get(ctx, "counter")
+		assert.ErrorIs(t, err, ErrRecordNotFound)
+	})
+}

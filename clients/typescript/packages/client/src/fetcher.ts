@@ -4,7 +4,7 @@ import { LimenError, deriveErrorCode } from "./errors";
 import { ensureLeadingSlash, joinURL, stripTrailingSlash } from "./helpers";
 import type { HookRunner } from "./hooks";
 import type { FetchInit, FetchOptions, RequestContext, ResponseContext } from "./plugin";
-import type { EnvelopeConfig } from "./types";
+import type { EnvelopeConfig, QueryParams } from "./types";
 
 export type FetcherFetchOptions = FetchOptions & {
   /** Whether to send credentials (cookies). Defaults to `"include"`. */
@@ -156,16 +156,11 @@ export class Fetcher {
     return JSON.parse(text) as unknown;
   }
 
-  private normalizeRelativePath(
-    basePath: string,
-    relativePath: string,
-    query: Record<string, string> | undefined,
-  ): string {
+  private normalizeRelativePath(basePath: string, relativePath: string, query: QueryParams | undefined): string {
     const base = basePath === "" || basePath === "/" ? "" : ensureLeadingSlash(stripTrailingSlash(basePath));
     let path = base + ensureLeadingSlash(relativePath);
     if (query !== undefined) {
-      const params = new URLSearchParams(query);
-      const qs = params.toString();
+      const qs = new URLSearchParams(query).toString();
       if (qs.length > 0) {
         path = `${path}?${qs}`;
       }

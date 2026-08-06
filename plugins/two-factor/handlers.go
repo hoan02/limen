@@ -1,10 +1,7 @@
 package twofactor
 
 import (
-	"fmt"
 	"net/http"
-	"slices"
-	"strings"
 
 	"github.com/thecodearcher/limen"
 )
@@ -24,15 +21,15 @@ func newTwoFactorHandlers(plugin *twoFactorPlugin, responder *limen.Responder, h
 }
 
 func (a *twoFactorHandlers) InitiateTwoFactorSetup(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
-		return v.RequiredString("password", data["password"])
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
+		v.Field("password").Required()
 	})
 
 	if body == nil {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		a.responder.Error(w, r, err)
 		return
@@ -49,15 +46,15 @@ func (a *twoFactorHandlers) InitiateTwoFactorSetup(w http.ResponseWriter, r *htt
 }
 
 func (a *twoFactorHandlers) FinalizeTwoFactorSetup(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
-		return v.RequiredString("code", data["code"])
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
+		v.Field("code").Required()
 	})
 
 	if body == nil {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		a.responder.Error(w, r, err)
 		return
@@ -81,15 +78,15 @@ func (a *twoFactorHandlers) FinalizeTwoFactorSetup(w http.ResponseWriter, r *htt
 
 // Disable disables 2FA for the current user
 func (a *twoFactorHandlers) Disable(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
-		return v.RequiredString("password", data["password"])
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
+		v.Field("password").Required()
 	})
 
 	if body == nil {
 		return
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r)
+	session, err := limen.GetCurrentSessionFromCtx(r.Context())
 	if err != nil {
 		a.responder.Error(w, r, err)
 		return
@@ -112,22 +109,11 @@ func (a *twoFactorHandlers) Disable(w http.ResponseWriter, r *http.Request) {
 
 // VerifyLoginWithTwoFactor verifies the 2FA code and completes the login process
 func (a *twoFactorHandlers) VerifyLoginWithTwoFactor(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, a.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
-		return v.RequiredString("code", data["code"]).
-			Custom("method", func() error {
-				allowedMethods := []string{string(TwoFactorMethodOTP), string(TwoFactorMethodTOTP)}
-				method := data["method"]
-				if method == nil || method == "" {
-					method = string(TwoFactorMethodTOTP)
-					data["method"] = method
-				}
-
-				if method, ok := method.(string); ok && slices.Contains(allowedMethods, method) {
-					return nil
-				}
-
-				return fmt.Errorf("invalid 2FA method must be one of: %s", strings.Join(allowedMethods, ", "))
-			}, false)
+	body := limen.ValidateRequest(w, r, a.responder, func(v *limen.Validator) {
+		v.Field("code").Required()
+		v.Field("method").
+			Optional(string(TwoFactorMethodTOTP)).
+			In([]string{string(TwoFactorMethodOTP), string(TwoFactorMethodTOTP)})
 	})
 
 	if body == nil {

@@ -1,6 +1,9 @@
-import type { ClientPlugin, PluginSchema } from "./define-plugin";
+import type { ClientPlugin, FieldsOf, PluginSchema } from "./define-plugin";
 import type { InputOf, OutputOf, RouteCallOptions } from "./route";
-import type { IsAny, KebabToCamel, Split, UnionToIntersection } from "./type-utils";
+import type { SessionState } from "./session-store";
+import type { DataStore, StoreState } from "./data-store";
+import type { PluginStores } from "./stores";
+import type { IsAny, KebabToCamel, Prettify, Split, UnionToIntersection } from "./type-utils";
 import type { User } from "./types";
 
 type IsParam<S extends string> = S extends `:${string}` ? true : false;
@@ -83,7 +86,7 @@ type ActionsOf<P> = P extends { actions?: (ctx: never, run: never) => infer A }
   : unknown;
 
 export type InferPluginContribution<P> =
-  P extends ClientPlugin<infer _Id, infer BasePath, infer Routes, infer _Actions, infer _Schema>
+  P extends ClientPlugin<infer _Id, infer BasePath, infer Routes, infer _Actions, infer _Schema, infer _Stores>
     ? InferRoutes<Routes, PathSegments<BasePath>> & ActionsOf<P>
     : unknown;
 
@@ -96,14 +99,10 @@ export type CombinedClientContributions<Plugins extends readonly unknown[]> = Un
  * `any` and non-object declarations contribute nothing, so the folded type never
  * collapses into an open index signature.
  */
-type ModelFieldsOf<P, M extends keyof PluginSchema> = P extends { schema?: infer S }
+type ModelFieldsOf<P, M extends keyof PluginSchema & string> = P extends { schema?: infer S }
   ? IsAny<S> extends true
     ? Record<never, never>
-    : S extends Record<M, infer F>
-      ? F extends object
-        ? F
-        : Record<never, never>
-      : Record<never, never>
+    : FieldsOf<S, M, Record<never, never>>
   : Record<never, never>;
 
 /** Intersection of every registered plugin's contributions to one model. */
@@ -114,3 +113,34 @@ export type PluginModelFields<Plugins extends readonly unknown[], M extends keyo
 /** A consumer's `TFields` widened with all plugin-contributed `user` fields. */
 export type InferUserFields<Plugins extends readonly unknown[], TFields> = User<TFields> &
   PluginModelFields<Plugins, "user">;
+
+/** The value each store in a registration record holds. */
+export type StoreValues<S> = { [K in keyof S]: S[K] extends DataStore<infer T> ? StoreState<T> : never };
+
+/**
+ * The store values one plugin registers. Widened `any` registers nothing, so
+ * the merged map never collapses into an open index signature.
+ */
+type StoresOfPlugin<P> = P extends { stores?: infer S }
+  ? IsAny<S> extends true
+    ? Record<never, never>
+    : S extends (ctx: never) => infer R
+      ? R extends PluginStores
+        ? StoreValues<R>
+        : Record<never, never>
+      : Record<never, never>
+  : Record<never, never>;
+
+/** Every registered plugin's store values, merged. */
+export type PluginStoresOf<Plugins extends readonly unknown[]> = UnionToIntersection<
+  { [K in keyof Plugins]: StoresOfPlugin<Plugins[K]> }[number]
+>;
+
+/** The stores the core owns. Session carries the plugin-enriched user shape. */
+export type CoreStores<Plugins extends readonly unknown[], TFields> = {
+  session: SessionState<Prettify<InferUserFields<Plugins, TFields>>>;
+};
+
+/** Every store on a client, as the values they hold. */
+export type StoresOf<Plugins extends readonly unknown[], TFields> = CoreStores<Plugins, TFields> &
+  PluginStoresOf<Plugins>;

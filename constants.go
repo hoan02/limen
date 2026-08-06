@@ -38,6 +38,7 @@ const (
 	PluginSessionJWT         PluginName = "session-jwt"
 	PluginMagicLink          PluginName = "magic-link"
 	PluginAPIKey             PluginName = "api-key"
+	PluginOrganization       PluginName = "organization"
 )
 
 // ============================================================================
@@ -85,6 +86,7 @@ const (
 const (
 	// Common schema fields
 	SchemaIDField         SchemaField = "id"
+	SchemaPublicIDField   SchemaField = "public_id"
 	SchemaCreatedAtField  SchemaField = "created_at"
 	SchemaUpdatedAtField  SchemaField = "updated_at"
 	SchemaSoftDeleteField SchemaField = "deleted_at"

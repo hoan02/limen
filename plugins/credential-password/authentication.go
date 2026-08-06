@@ -67,6 +67,10 @@ func (p *credentialPasswordPlugin) FindUserByUsername(ctx context.Context, usern
 // If username support is enabled, a username can be provided in additionalFields.
 // Returns an AuthenticationResult on success, or an error if signup fails.
 func (p *credentialPasswordPlugin) SignUpWithCredentialAndPassword(ctx context.Context, user *limen.User, additionalFields map[string]any) (*limen.AuthenticationResult, error) {
+	normalizedUser := *user
+	normalizedUser.Email = limen.NormalizeEmail(user.Email)
+	user = &normalizedUser
+
 	if err := p.validateUser(user, additionalFields); err != nil {
 		return nil, err
 	}

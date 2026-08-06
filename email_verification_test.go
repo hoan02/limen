@@ -27,9 +27,10 @@ func TestRequestEmailVerification(t *testing.T) {
 	l := newTestLimenWithEmailVerification(t)
 	SeedTestUser(t, l, "verify@test.com")
 
-	verification, err := l.RequestEmailVerification(context.Background(), &User{Email: "verify@test.com"}, false)
+	verification, err := l.RequestEmailVerification(context.Background(), &User{Email: " VERIFY@TEST.COM "}, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, verification.Value)
+	assert.Equal(t, "email_verification::verify@test.com", verification.Subject)
 }
 
 func TestRequestEmailVerification_AlreadyVerified(t *testing.T) {

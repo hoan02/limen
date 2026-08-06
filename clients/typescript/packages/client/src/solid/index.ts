@@ -1,34 +1,29 @@
 import type { Accessor } from "solid-js";
 import { createAuthClient as createCoreClient } from "../client";
 import type { AnyClientPlugin } from "../define-plugin";
-import type { SessionState } from "../session-store";
+import type { StoresOf } from "../infer";
+import { attachStoreHooks } from "../stores";
 import type { Prettify } from "../type-utils";
-import type { AuthClient, CreateAuthClientOptions, PrettyUserFields } from "../types";
+import type { AuthClient, CreateAuthClientOptions } from "../types";
 import { useStore } from "./solid-store";
 
-/**
- * An {@link AuthClient} augmented with Solid primitives.
- */
+/** One primitive per registered store, each returning an accessor. */
+export type SolidStoreHooks<Stores> = {
+  readonly [K in keyof Stores & string as `use${Capitalize<K>}`]: () => Accessor<Stores[K]>;
+};
+
 export type SolidAuthClient<Plugins extends readonly AnyClientPlugin[], TFields = unknown> = Prettify<
-  AuthClient<Plugins, TFields> & {
-    /**
-     * Reactively read the session store as a Solid accessor. Updates whenever
-     * `{ data, isPending, error }` changes.
-     */
-    useSession: () => Accessor<SessionState<PrettyUserFields<Plugins, TFields>>>;
-  }
+  AuthClient<Plugins, TFields> & SolidStoreHooks<StoresOf<Plugins, TFields>>
 >;
 
-/**
- * Create a Limen auth client with Solid primitives attached.
- */
 export function createAuthClient<const Plugins extends readonly AnyClientPlugin[] = readonly [], TFields = unknown>(
   opts: CreateAuthClientOptions<Plugins, TFields>,
 ): SolidAuthClient<Plugins, TFields> {
   const client = createCoreClient<Plugins, TFields>(opts);
-  const useSession = (): Accessor<SessionState<PrettyUserFields<Plugins, TFields>>> => useStore(client.$session);
 
-  return Object.assign(client, { useSession }) as SolidAuthClient<Plugins, TFields>;
+  attachStoreHooks(client, (store) => useStore(store));
+
+  return client as SolidAuthClient<Plugins, TFields>;
 }
 
 export type { SessionState, SessionStore } from "../session-store";

@@ -93,6 +93,7 @@ export function sessionJwtPlugin<TFields = unknown>(config: SessionJwtPluginConf
           getAccessToken,
           refresh,
           getTokens: () => store.get(),
+          setTokens: (tokens: SessionJwtTokens) => store.set(tokens),
           clear: () => store.clear(),
         },
       };
@@ -111,7 +112,7 @@ export function sessionJwtPlugin<TFields = unknown>(config: SessionJwtPluginConf
         {
           allowOnFailure: true,
           run: (res) => {
-            const tokens = tokensFromHeaders(res.headers);
+            const tokens = tokensFromHeaders(res.headers, store.get());
             if (tokens) {
               store.set(tokens);
             }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -32,6 +33,19 @@ func GetJSONBody(req *http.Request) map[string]any {
 	}
 
 	return nil
+}
+
+func queryToMap(r *http.Request) map[string]any {
+	q := r.URL.Query()
+	out := make(map[string]any, len(q))
+	for key, values := range q {
+		if len(values) == 1 {
+			out[key] = values[0]
+		} else {
+			out[key] = values
+		}
+	}
+	return out
 }
 
 // shouldParseBody checks if the request body should be parsed as JSON
@@ -88,4 +102,26 @@ func getCurrentRouteFromContext(ctx context.Context) *route {
 		return route
 	}
 	return nil
+}
+
+// ParsePagination reads page/per_page from the request query, applying defaults
+// and clamping per_page to MaxPerPage, and converts them to a limit/offset
+// QueryOptions.
+func ParsePagination(r *http.Request) *QueryOptions {
+	q := r.URL.Query()
+
+	perPage := min(queryInt(q.Get("per_page"), DefaultPerPage), MaxPerPage)
+	page := queryInt(q.Get("page"), DefaultPage)
+
+	return &QueryOptions{
+		Limit:  perPage,
+		Offset: (page - 1) * perPage,
+	}
+}
+
+func queryInt(raw string, fallback int) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n > 0 {
+		return n
+	}
+	return fallback
 }

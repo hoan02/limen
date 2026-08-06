@@ -1,3 +1,5 @@
+import type { Page } from "./types";
+
 export function stripTrailingSlash(s: string): string {
   return s.endsWith("/") ? s.slice(0, -1) : s;
 }
@@ -32,6 +34,11 @@ export function toCamelCaseKey(key: string): string {
   return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
+/** `activeOrganization` -> `ActiveOrganization`, for generated hook names. */
+export function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export function kebabToCamel(key: string): string {
   return key.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
@@ -56,6 +63,35 @@ export function camelizeEach<T = Record<string, unknown>>(raw: unknown): T[] {
     return [];
   }
   return raw.map((item) => camelizeKeys<T>(item));
+}
+
+/**
+ * Whether a response carries a full pagination envelope.
+ */
+export function isPageResponse(raw: unknown): boolean {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return false;
+  }
+  const value = raw as Record<string, unknown>;
+  return (
+    Array.isArray(value["items"]) &&
+    typeof value["total"] === "number" &&
+    typeof value["page"] === "number" &&
+    typeof value["per_page"] === "number" &&
+    typeof value["total_pages"] === "number"
+  );
+}
+
+/** Camelize a paginated response and each item it contains. */
+export function camelizePage<T>(
+  raw: unknown,
+  parseItem: (item: unknown) => T = (item) => camelizeKeys<T>(item),
+): Page<T> {
+  const page = camelizeKeys<Omit<Page<T>, "items"> & { items: unknown }>(raw);
+  return {
+    ...page,
+    items: Array.isArray(page.items) ? page.items.map(parseItem) : [],
+  };
 }
 
 /**

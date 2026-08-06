@@ -23,8 +23,8 @@ func newMagicLinkHandlers(plugin *magicLinkPlugin, httpCore *limen.LimenHTTPCore
 }
 
 func (h *magicLinkHandlers) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateJSON(w, r, h.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
-		return v.RequiredString("email", data["email"]).Email("email", data["email"])
+	body := limen.ValidateRequest(w, r, h.responder, func(v *limen.Validator) {
+		v.Field("email").Required().Email()
 	})
 	if body == nil {
 		return

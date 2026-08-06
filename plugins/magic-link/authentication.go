@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/thecodearcher/limen"
 )
 
 func (p *magicLinkPlugin) RequestMagicLink(ctx context.Context, email string, opts ...*RequestMagicLinkOptions) (*MagicLinkMessage, error) {
-	email = strings.TrimSpace(email)
+	email = limen.NormalizeEmail(email)
 	if email == "" {
 		return nil, ErrEmailRequired
 	}
