@@ -132,48 +132,6 @@ func (m *opaqueSessionManager) ListSessions(ctx context.Context, userID any) ([]
 	return m.store.ListByUserID(ctx, userID)
 }
 
-func (m *opaqueSessionManager) GetSessionData(_ context.Context, session *Session, field SchemaField) (any, error) {
-	return m.core.Schema.Session.SessionData(session, field)
-}
-
-func (m *opaqueSessionManager) UpdateSession(ctx context.Context, session *Session, data map[SchemaField]any) (*SessionResult, error) {
-	payload := unwrapInternalSessionValues(data)
-	if _, err := m.core.Schema.Session.sessionColumns(payload); err != nil {
-		return nil, err
-	}
-	payload[SessionSchemaTokenField] = session.Token
-
-	if err := m.store.Set(ctx, payload); err != nil {
-		return nil, err
-	}
-
-	fresh, err := m.store.Get(ctx, session.Token)
-	if err != nil {
-		return nil, err
-	}
-	*session = *fresh
-	return nil, nil
-}
-
-func (m *opaqueSessionManager) UpdateSessions(ctx context.Context, data map[SchemaField]any, match map[SchemaField]any) error {
-	bulk, ok := m.store.(SessionBulkUpdater)
-	if !ok {
-		return nil
-	}
-	return bulk.UpdateSessions(ctx, unwrapInternalSessionValues(data), unwrapInternalSessionValues(match))
-}
-
-func unwrapInternalSessionValues(data map[SchemaField]any) map[SchemaField]any {
-	unwrapped := make(map[SchemaField]any, len(data))
-	for field, value := range data {
-		if sv, ok := value.(SessionValue); ok {
-			value = sv.Internal
-		}
-		unwrapped[field] = value
-	}
-	return unwrapped
-}
-
 func (m *opaqueSessionManager) extendSessionExpiration(ctx context.Context, session *Session) (*SessionResult, error) {
 	policy := m.resolveSessionPolicy(session)
 	now := time.Now()

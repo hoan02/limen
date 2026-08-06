@@ -2,8 +2,6 @@ package limen
 
 import (
 	"context"
-	"fmt"
-	"maps"
 )
 
 type databaseSessionStore struct {
@@ -19,105 +17,26 @@ func newDatabaseSessionStore(core *LimenCore) *databaseSessionStore {
 }
 
 func (s *databaseSessionStore) Get(ctx context.Context, token string) (*Session, error) {
-	session, err := s.core.FindOne(ctx, s.schema, []Where{
-		Eq(s.schema.GetTokenField(), token),
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	return session.(*Session), nil
+	return s.core.DBAction.FindSessionByToken(ctx, token)
 }
 
-func (s *databaseSessionStore) Set(ctx context.Context, data any) error {
-	switch v := data.(type) {
-	case *Session:
-		payload := make(map[SchemaField]any)
-		for column, value := range s.schema.ToStorage(v) {
-			payload[SchemaField(column)] = value
-		}
-		if v.ID == nil {
-			return s.core.Create(ctx, s.schema, payload, nil)
-		}
-		return s.write(ctx, payload)
-	case map[SchemaField]any:
-		return s.write(ctx, maps.Clone(v))
-	default:
-		return errUnsupportedSessionData(data)
+func (s *databaseSessionStore) Set(ctx context.Context, session *Session) error {
+	if session.ID == nil {
+		return s.core.DBAction.CreateSession(ctx, session, nil)
 	}
-}
-
-func (s *databaseSessionStore) write(ctx context.Context, payload map[SchemaField]any) error {
-	token, err := sessionPayloadToken(payload)
-	if err != nil {
-		return err
-	}
-
-	update := maps.Clone(payload)
-	delete(update, SessionSchemaTokenField)
-	if len(update) == 0 {
-		return nil
-	}
-
-	result, err := s.core.UpdateWithResult(ctx, s.schema, update, []Where{
-		Eq(s.schema.GetTokenField(), token),
+	return s.core.DBAction.UpdateSession(ctx, session, []Where{
+		Eq(s.schema.GetTokenField(), session.Token),
 	})
-	if err != nil {
-		return err
-	}
-
-	if result.RowsAffected > 0 {
-		return nil
-	}
-	return s.core.Create(ctx, s.schema, payload, nil)
-}
-
-func (s *databaseSessionStore) UpdateSessions(ctx context.Context, data map[SchemaField]any, match map[SchemaField]any) error {
-	columns, err := s.schema.sessionColumns(match)
-	if err != nil {
-		return err
-	}
-
-	conditions := make([]Where, 0, len(columns))
-	for column, value := range columns {
-		conditions = append(conditions, Eq(column, value))
-	}
-	return s.core.Update(ctx, s.schema, data, conditions)
-}
-
-func sessionPayloadToken(payload map[SchemaField]any) (string, error) {
-	token, ok := payload[SessionSchemaTokenField].(string)
-	if !ok || token == "" {
-		return "", fmt.Errorf("session store: session data requires %q", SessionSchemaTokenField)
-	}
-	return token, nil
-}
-
-func errUnsupportedSessionData(data any) error {
-	return fmt.Errorf("session store: unsupported data type %T, want *limen.Session or map[limen.SchemaField]any", data)
 }
 
 func (s *databaseSessionStore) Delete(ctx context.Context, token string) error {
-	return s.core.Delete(ctx, s.schema, []Where{
-		Eq(s.schema.GetTokenField(), token),
-	})
+	return s.core.DBAction.DeleteSessionByToken(ctx, token)
 }
 
 func (s *databaseSessionStore) DeleteByUserID(ctx context.Context, userID any) error {
-	return s.core.Delete(ctx, s.schema, []Where{
-		Eq(s.schema.GetUserIDField(), userID),
-	})
+	return s.core.DBAction.DeleteSessionByUserID(ctx, userID)
 }
 
 func (s *databaseSessionStore) ListByUserID(ctx context.Context, userID any) ([]Session, error) {
-	models, err := s.core.FindMany(ctx, s.schema, []Where{
-		Eq(s.schema.GetUserIDField(), userID),
-	})
-	if err != nil {
-		return nil, err
-	}
-	sessions := make([]Session, 0, len(models))
-	for _, m := range models {
-		sessions = append(sessions, *m.(*Session))
-	}
-	return sessions, nil
+	return s.core.DBAction.ListSessionsByUserID(ctx, userID)
 }

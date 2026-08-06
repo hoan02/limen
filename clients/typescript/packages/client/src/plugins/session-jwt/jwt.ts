@@ -29,14 +29,14 @@ export function isExpiring(token: string, skewMs: number): boolean {
   return exp * 1000 - skewMs <= Date.now();
 }
 
-export function tokensFromHeaders(headers: Headers, current?: SessionJwtTokens | null): SessionJwtTokens | null {
+export function tokensFromHeaders(headers: Headers): SessionJwtTokens | null {
   const accessToken = headers.get(SET_AUTH_TOKEN_HEADER);
   if (!accessToken) {
     return null;
   }
 
   const tokens: SessionJwtTokens = { accessToken };
-  const refreshToken = headers.get(SET_REFRESH_TOKEN_HEADER) ?? current?.refreshToken;
+  const refreshToken = headers.get(SET_REFRESH_TOKEN_HEADER);
   if (refreshToken) {
     tokens.refreshToken = refreshToken;
   }

@@ -1,9 +1,6 @@
 package sql
 
 import (
-	"encoding/json"
-	"fmt"
-	"reflect"
 	"sort"
 	"time"
 )
@@ -71,39 +68,4 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-// normalizeWriteMap returns a shallow copy with map/slice values JSON-encoded so
-// database/sql drivers can bind them (e.g. for JSON/JSONB columns).
-func normalizeWriteMap(m map[string]any) (map[string]any, error) {
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		normalized, err := normalizeWriteValue(v)
-		if err != nil {
-			return nil, fmt.Errorf("column %q: %w", k, err)
-		}
-		out[k] = normalized
-	}
-	return out, nil
-}
-
-func normalizeWriteValue(v any) (any, error) {
-	if v == nil {
-		return nil, nil
-	}
-	// []byte is a slice but must stay raw for drivers (json.Marshal would base64 it).
-	if _, ok := v.([]byte); ok {
-		return v, nil
-	}
-
-	switch reflect.ValueOf(v).Kind() {
-	case reflect.Map, reflect.Slice, reflect.Array:
-		b, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		return string(b), nil
-	default:
-		return v, nil
-	}
 }

@@ -2,7 +2,6 @@ package limen
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -17,7 +16,7 @@ type Session struct {
 	raw        map[string]any
 }
 
-// Raw returns the session raw data as returned from storage
+// Raw returns the session raw data as returned from the database
 func (s Session) Raw() map[string]any {
 	return s.raw
 }
@@ -64,29 +63,6 @@ func newDefaultSessionSchema(c *SchemaConfig, opts ...SchemaConfigSessionOption)
 func (s *SessionSchema) GetSoftDeleteField() string {
 	// sessions should not have a soft delete field
 	return ""
-}
-
-// SessionData returns the value the session holds for the logical field.
-func (s *SessionSchema) SessionData(session *Session, field SchemaField) (any, error) {
-	column := s.GetField(field)
-	if column == "" {
-		return nil, fmt.Errorf("%w: %q", ErrUnknownSessionField, field)
-	}
-	return session.Raw()[column], nil
-}
-
-// sessionColumns resolves a field-keyed session payload to database columns,
-// rejecting fields not registered on the sessions schema.
-func (s *SessionSchema) sessionColumns(payload map[SchemaField]any) (map[string]any, error) {
-	columns := make(map[string]any, len(payload))
-	for field, value := range payload {
-		column := s.GetField(field)
-		if column == "" {
-			return nil, fmt.Errorf("%w: %q", ErrUnknownSessionField, field)
-		}
-		columns[column] = value
-	}
-	return columns, nil
 }
 
 func (s *SessionSchema) GetUserIDField() string {

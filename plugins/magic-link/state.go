@@ -2,6 +2,7 @@ package magiclink
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -76,8 +77,9 @@ func (p *magicLinkPlugin) generateStateNonce() string {
 }
 
 func (p *magicLinkPlugin) generateTokenHash(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, p.core.Secret())
+	mac.Write([]byte(token))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 // validateToken validates a token hash and returns the verification record

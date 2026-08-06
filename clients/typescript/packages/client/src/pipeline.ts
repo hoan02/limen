@@ -1,11 +1,11 @@
 import type { AnyRouteContext } from "./context";
 import type { LimenError } from "./errors";
-import { camelizeEach, camelizeKeys, camelizePage, isPageResponse } from "./helpers";
+import { camelizeEach } from "./helpers";
 import { resolvePath } from "./path";
 import type { FetchInit, FetchOptions } from "./plugin";
 import type { AnyRoute, HttpRunner, RouteCallOptions } from "./route";
 import { defaultSerialize } from "./serialize";
-import type { QueryParams, Session } from "./types";
+import type { Session } from "./types";
 
 /**
  * Run the default HTTP steps for a route — merge defaults, resolve path params,
@@ -22,7 +22,7 @@ async function runHttp(ctx: AnyRouteContext, def: AnyRoute, input: unknown, call
 
   const init: FetchInit = { ...callInit, method: def.method, absolute: def.absolute ?? false };
   if (def.method === "GET" && payload !== undefined) {
-    init.query = payload as QueryParams;
+    init.query = payload as Record<string, string>;
   } else {
     init.body = payload;
   }
@@ -36,10 +36,7 @@ async function runHttp(ctx: AnyRouteContext, def: AnyRoute, input: unknown, call
   if (def.parse !== undefined) {
     return def.parse(raw);
   }
-  if (isPageResponse(raw)) {
-    return camelizePage(raw);
-  }
-  return Array.isArray(raw) ? camelizeEach(raw) : camelizeKeys(raw);
+  return Array.isArray(raw) ? camelizeEach(raw) : raw;
 }
 
 async function applyEffects(ctx: AnyRouteContext, def: AnyRoute, result: unknown): Promise<void> {

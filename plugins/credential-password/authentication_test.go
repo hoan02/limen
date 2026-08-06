@@ -27,22 +27,6 @@ func TestSignUp(t *testing.T) {
 	assert.NotEqual(t, pw, *result.User.Password, "stored password should be hashed")
 }
 
-func TestSignUp_NormalizesEmailWithoutMutatingInput(t *testing.T) {
-	t.Parallel()
-
-	plugin := newTestLimenWithPlugin(t)
-	pw := "Password1"
-	input := &limen.User{
-		Email:    "  New@TEST.com ",
-		Password: &pw,
-	}
-
-	result, err := plugin.SignUpWithCredentialAndPassword(context.Background(), input, nil)
-	require.NoError(t, err)
-	assert.Equal(t, "new@test.com", result.User.Email)
-	assert.Equal(t, "  New@TEST.com ", input.Email)
-}
-
 func TestSignUp_DuplicateEmail(t *testing.T) {
 	t.Parallel()
 
@@ -52,21 +36,6 @@ func TestSignUp_DuplicateEmail(t *testing.T) {
 	pw := "Password1"
 	_, err := plugin.SignUpWithCredentialAndPassword(context.Background(), &limen.User{
 		Email:    "dup@test.com",
-		Password: &pw,
-	}, nil)
-
-	assert.ErrorIs(t, err, ErrEmailAlreadyExists)
-}
-
-func TestSignUp_DuplicateEmailIgnoresCase(t *testing.T) {
-	t.Parallel()
-
-	plugin := newTestLimenWithPlugin(t)
-	seedTestUser(t, plugin, "dup@test.com", "Password1")
-
-	pw := "Password1"
-	_, err := plugin.SignUpWithCredentialAndPassword(context.Background(), &limen.User{
-		Email:    "DUP@TEST.COM",
 		Password: &pw,
 	}, nil)
 
@@ -144,21 +113,6 @@ func TestSignIn(t *testing.T) {
 	seedTestUser(t, plugin, "signin@test.com", "Password1")
 
 	result, err := plugin.SignInWithCredentialAndPassword(context.Background(), "signin@test.com", "Password1")
-	require.NoError(t, err)
-	assert.Equal(t, "signin@test.com", result.User.Email)
-}
-
-func TestSignIn_NormalizesEmail(t *testing.T) {
-	t.Parallel()
-
-	plugin := newTestLimenWithPlugin(t)
-	seedTestUser(t, plugin, "signin@test.com", "Password1")
-
-	result, err := plugin.SignInWithCredentialAndPassword(
-		context.Background(),
-		" SIGNIN@TEST.COM ",
-		"Password1",
-	)
 	require.NoError(t, err)
 	assert.Equal(t, "signin@test.com", result.User.Email)
 }

@@ -16,7 +16,7 @@ func newTOTPHandlers(totp *totp, responder *limen.Responder) *totpHandlers {
 }
 
 func (t *totpHandlers) GetSetupURI(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		t.responder.Error(w, r, err)
 		return

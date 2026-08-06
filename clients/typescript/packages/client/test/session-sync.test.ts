@@ -1,7 +1,7 @@
 import { atom } from "nanostores";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionState } from "../src/session-store";
 import { createSessionSync } from "../src/session-sync";
+import type { SessionState } from "../src/session-store";
 import type { Session } from "../src/types";
 
 const STORAGE_KEY = "limen.session-sync";
@@ -11,7 +11,7 @@ function user(id: string, fields: Partial<Session["user"]> = {}): Session {
 }
 
 function stateOf(session: Session | null): SessionState {
-  return { data: session, isPending: false, settled: true, error: null };
+  return { data: session, isPending: false, error: null };
 }
 
 function tick(): Promise<void> {
@@ -49,22 +49,37 @@ class FakeBroadcastChannel {
 }
 
 function makeStore(initial: Session | null = null) {
-  const $state = atom<SessionState>(stateOf(initial));
+  const $session = atom<SessionState>(stateOf(initial));
   const setData = vi.fn((session: Session | null) => {
-    $state.set(stateOf(session));
+    $session.set(stateOf(session));
   });
   const refetch = vi.fn(async () => {});
-  const current = () => $state.get();
-  return { $state, current, setData, refetch };
+  return { $session, setData, refetch };
 }
 
 type SyncTab = ReturnType<typeof makeStore>;
 
 function syncCrossTab(tab: SyncTab): () => void {
-  return createSessionSync(tab, { crossTabSync: true, refetchOnWindowFocus: false });
+  return createSessionSync(tab, { fetchOnMount: false, crossTabSync: true, refetchOnWindowFocus: false });
 }
 
-describe("createSessionSync cross-tab", () => {
+describe("createSessionSync hydration", () => {
+  it("refetches once when fetchOnMount is true", () => {
+    const tab = makeStore();
+    createSessionSync(tab, { fetchOnMount: true, crossTabSync: false, refetchOnWindowFocus: false });
+
+    expect(tab.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refetch when fetchOnMount is false", () => {
+    const tab = makeStore();
+    createSessionSync(tab, { fetchOnMount: false, crossTabSync: false, refetchOnWindowFocus: false });
+
+    expect(tab.refetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("createSessionSync cross-tab over BroadcastChannel", () => {
   beforeEach(() => {
     FakeBroadcastChannel.reset();
     vi.stubGlobal("BroadcastChannel", FakeBroadcastChannel);
@@ -74,21 +89,46 @@ describe("createSessionSync cross-tab", () => {
     vi.unstubAllGlobals();
   });
 
-  it("applies a data snapshot to other tabs without refetch", async () => {
+  it("applies a login snapshot to other tabs without any refetch", async () => {
     const tabA = makeStore();
     const tabB = makeStore();
     syncCrossTab(tabA);
     syncCrossTab(tabB);
 
-    tabA.$state.set(stateOf(user("user-1", { emailVerifiedAt: "2026-06-18T00:00:00Z" })));
+    tabA.$session.set(stateOf(user("user-1")));
     await tick();
 
     expect(tabB.setData).toHaveBeenCalledTimes(1);
-    expect(tabB.$state.get().data).toMatchObject({
-      user: { id: "user-1", emailVerifiedAt: "2026-06-18T00:00:00Z" },
-    });
+    expect(tabB.$session.get().data?.user.id).toBe("user-1");
     expect(tabB.refetch).not.toHaveBeenCalled();
     expect(tabA.setData).not.toHaveBeenCalled();
+  });
+
+  it("applies a non-identity field change (any session change, not just login/logout)", async () => {
+    const tabA = makeStore(user("user-1"));
+    const tabB = makeStore(user("user-1"));
+    syncCrossTab(tabA);
+    syncCrossTab(tabB);
+
+    tabA.$session.set(stateOf(user("user-1", { emailVerifiedAt: "2026-06-18T00:00:00Z" })));
+    await tick();
+
+    expect(tabB.setData).toHaveBeenCalledTimes(1);
+    expect(tabB.$session.get().data?.user.emailVerifiedAt).toBe("2026-06-18T00:00:00Z");
+  });
+
+  it("applies a logout snapshot with no refetch", async () => {
+    const tabA = makeStore(user("user-1"));
+    const tabB = makeStore(user("user-1"));
+    syncCrossTab(tabA);
+    syncCrossTab(tabB);
+
+    tabA.$session.set(stateOf(null));
+    await tick();
+
+    expect(tabB.setData).toHaveBeenCalledTimes(1);
+    expect(tabB.$session.get().data).toBeNull();
+    expect(tabB.refetch).not.toHaveBeenCalled();
   });
 
   it("does not re-broadcast a remotely applied change", async () => {
@@ -99,7 +139,7 @@ describe("createSessionSync cross-tab", () => {
     syncCrossTab(tabB);
     syncCrossTab(tabC);
 
-    tabA.$state.set(stateOf(user("user-1")));
+    tabA.$session.set(stateOf(user("user-1")));
     await tick();
 
     expect(tabB.setData).toHaveBeenCalledTimes(1);
@@ -113,7 +153,7 @@ describe("createSessionSync cross-tab", () => {
     syncCrossTab(tabA);
     syncCrossTab(tabB);
 
-    tabA.$state.set({ data: user("user-1"), isPending: true, settled: true, error: null });
+    tabA.$session.set({ data: user("user-1"), isPending: true, error: null });
     await tick();
 
     expect(tabB.setData).not.toHaveBeenCalled();
@@ -126,14 +166,14 @@ describe("createSessionSync cross-tab", () => {
     const disposeB = syncCrossTab(tabB);
 
     disposeB();
-    tabA.$state.set(stateOf(user("user-1")));
+    tabA.$session.set(stateOf(user("user-1")));
     await tick();
 
     expect(tabB.setData).not.toHaveBeenCalled();
   });
 });
 
-describe("createSessionSync storage fallback", () => {
+describe("createSessionSync cross-tab storage fallback", () => {
   beforeEach(() => {
     vi.stubGlobal("BroadcastChannel", undefined);
     globalThis.localStorage.clear();
@@ -144,7 +184,7 @@ describe("createSessionSync storage fallback", () => {
     globalThis.localStorage.clear();
   });
 
-  it("applies a snapshot from a storage event to the session store", async () => {
+  it("applies a snapshot from a storage event", async () => {
     const tab = makeStore();
     syncCrossTab(tab);
 
@@ -154,7 +194,21 @@ describe("createSessionSync storage fallback", () => {
     await tick();
 
     expect(tab.setData).toHaveBeenCalledTimes(1);
-    expect(tab.$state.get().data?.user.id).toBe("user-1");
+    expect(tab.$session.get().data?.user.id).toBe("user-1");
+  });
+
+  it("writes then clears storage so the snapshot does not stay at rest", async () => {
+    const tab = makeStore();
+    const setItem = vi.spyOn(globalThis.localStorage, "setItem");
+    syncCrossTab(tab);
+
+    tab.$session.set(stateOf(user("user-1")));
+    await tick();
+
+    expect(setItem).toHaveBeenCalledWith(STORAGE_KEY, JSON.stringify({ data: user("user-1") }));
+    expect(globalThis.localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    setItem.mockRestore();
   });
 });
 
@@ -169,18 +223,19 @@ describe("createSessionSync refetchOnWindowFocus", () => {
 
   it("refetches with a throttle window when the tab becomes visible", async () => {
     const tab = makeStore(user("user-1"));
-    createSessionSync(tab, { crossTabSync: false, refetchOnWindowFocus: true });
+    createSessionSync(tab, { fetchOnMount: false, crossTabSync: false, refetchOnWindowFocus: true });
 
     setVisibility("visible");
     document.dispatchEvent(new Event("visibilitychange"));
     await tick();
 
-    expect(tab.refetch).toHaveBeenCalledWith({ maxAgeMs: expect.any(Number), skipWhenEmpty: true });
+    expect(tab.refetch).toHaveBeenCalledTimes(1);
+    expect(tab.refetch).toHaveBeenCalledWith({ maxAgeMs: expect.any(Number), skipSignedOut: true });
   });
 
   it("does not refetch while hidden", async () => {
     const tab = makeStore(user("user-1"));
-    createSessionSync(tab, { crossTabSync: false, refetchOnWindowFocus: true });
+    createSessionSync(tab, { fetchOnMount: false, crossTabSync: false, refetchOnWindowFocus: true });
 
     setVisibility("hidden");
     document.dispatchEvent(new Event("visibilitychange"));
@@ -191,7 +246,7 @@ describe("createSessionSync refetchOnWindowFocus", () => {
 
   it("removes the focus listener on dispose", async () => {
     const tab = makeStore(user("user-1"));
-    const dispose = createSessionSync(tab, { crossTabSync: false, refetchOnWindowFocus: true });
+    const dispose = createSessionSync(tab, { fetchOnMount: false, crossTabSync: false, refetchOnWindowFocus: true });
     dispose();
 
     setVisibility("visible");
@@ -199,5 +254,24 @@ describe("createSessionSync refetchOnWindowFocus", () => {
     await tick();
 
     expect(tab.refetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("createSessionSync in non-browser environments", () => {
+  it("does not open a channel when window is undefined", () => {
+    vi.stubGlobal("window", undefined);
+    vi.stubGlobal("BroadcastChannel", FakeBroadcastChannel);
+    FakeBroadcastChannel.reset();
+    try {
+      const tab = makeStore(user("user-1"));
+      const dispose = createSessionSync(tab, { fetchOnMount: false, crossTabSync: true, refetchOnWindowFocus: true });
+
+      tab.$session.set(stateOf(user("user-2")));
+
+      expect(FakeBroadcastChannel.peers.size).toBe(0);
+      expect(() => dispose()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

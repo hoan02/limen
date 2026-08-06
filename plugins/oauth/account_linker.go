@@ -11,7 +11,6 @@ import (
 )
 
 func (o *oauthPlugin) CreateOrLinkAccount(ctx context.Context, info *limen.OAuthAccountProfile) (*limen.AuthenticationResult, error) {
-	info = normalizeProviderInfo(info)
 	if err := o.validateProviderInfo(info); err != nil {
 		return nil, err
 	}
@@ -45,7 +44,6 @@ func (o *oauthPlugin) CreateOrLinkAccount(ctx context.Context, info *limen.OAuth
 // If the provider account is already linked to the same user, tokens are updated.
 // If the provider account is linked to a different user, an error is returned.
 func (o *oauthPlugin) LinkAccountToCurrentUser(ctx context.Context, user *limen.User, info *limen.OAuthAccountProfile) (*limen.AuthenticationResult, error) {
-	info = normalizeProviderInfo(info)
 	if err := o.validateProviderInfo(info); err != nil {
 		return nil, err
 	}
@@ -67,16 +65,6 @@ func (o *oauthPlugin) LinkAccountToCurrentUser(ctx context.Context, user *limen.
 	}
 
 	return o.linkAccountToUser(ctx, user, info)
-}
-
-func normalizeProviderInfo(info *limen.OAuthAccountProfile) *limen.OAuthAccountProfile {
-	if info == nil {
-		return nil
-	}
-
-	normalized := *info
-	normalized.Email = limen.NormalizeEmail(info.Email)
-	return &normalized
 }
 
 func (o *oauthPlugin) validateProviderInfo(info *limen.OAuthAccountProfile) error {

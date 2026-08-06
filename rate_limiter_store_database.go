@@ -29,10 +29,7 @@ func (s *databaseRateLimiterStore) Set(ctx context.Context, key string, value *R
 	if value.ID == nil {
 		return s.core.Create(ctx, s.core.Schema.RateLimit, value, nil)
 	}
-	return s.core.Update(ctx, s.core.Schema.RateLimit, map[SchemaField]any{
-		RateLimitSchemaCountField:         value.Count,
-		RateLimitSchemaLastRequestAtField: value.LastRequestAt,
-	}, []Where{
+	return s.core.UpdateRaw(ctx, s.core.Schema.RateLimit, value, []Where{
 		Eq(s.core.Schema.RateLimit.GetKeyField(), key),
-	})
+	}, false)
 }

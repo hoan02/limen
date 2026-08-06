@@ -85,7 +85,7 @@ func TestOpaqueSessionManager_ValidateSession_Expired(t *testing.T) {
 
 	ctx := context.Background()
 	past := time.Now().Add(-48 * time.Hour)
-	err := l.core.Create(ctx, l.core.Schema.Session, &Session{
+	err := l.core.DBAction.CreateSession(ctx, &Session{
 		Token:      "expired-token",
 		UserID:     userID,
 		CreatedAt:  past.Add(-7 * 24 * time.Hour),

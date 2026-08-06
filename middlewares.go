@@ -9,8 +9,8 @@ import (
 
 type contextKeyActiveSession struct{}
 
-func GetCurrentSessionFromCtx(ctx context.Context) (*ValidatedSession, error) {
-	if currentSession, ok := ctx.Value(contextKeyActiveSession{}).(*ValidatedSession); ok && currentSession != nil {
+func GetCurrentSessionFromCtx(r *http.Request) (*ValidatedSession, error) {
+	if currentSession, ok := r.Context().Value(contextKeyActiveSession{}).(*ValidatedSession); ok && currentSession != nil {
 		return currentSession, nil
 	}
 	return nil, NewLimenError(ErrSessionNotFound.Error(), http.StatusUnauthorized, nil)

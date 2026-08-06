@@ -9,22 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDatabaseActionHelper_NormalizesUserEmail(t *testing.T) {
-	t.Parallel()
-
-	l := newTestLimen(t)
-	ctx := context.Background()
-	input := &User{Email: "  User@Example.COM "}
-
-	err := l.core.DBAction.CreateUser(ctx, input, nil)
-	require.NoError(t, err)
-	assert.Equal(t, "  User@Example.COM ", input.Email, "creating a user should not mutate the caller")
-
-	user, err := l.core.DBAction.FindUserByEmail(ctx, "USER@example.com")
-	require.NoError(t, err)
-	assert.Equal(t, "user@example.com", user.Email)
-}
-
 func TestDatabaseActionHelper_VerificationLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -86,69 +70,66 @@ func TestDatabaseActionHelper_CreateVerification_EmptyIdentifier(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDatabaseSessionStore_Lifecycle(t *testing.T) {
+func TestDatabaseActionHelper_SessionLifecycle(t *testing.T) {
 	t.Parallel()
 
 	l := newTestLimen(t)
 	ctx := context.Background()
-	store := newDatabaseSessionStore(l.core)
+	dbAction := l.core.DBAction
 
 	userID := seedUser(t, l, "session-lifecycle@test.com")
 
 	now := time.Now()
-	err := store.Set(ctx, &Session{
+	err := dbAction.CreateSession(ctx, &Session{
 		Token:      "sess-token-1",
 		UserID:     userID,
 		CreatedAt:  now,
 		ExpiresAt:  now.Add(7 * 24 * time.Hour),
 		LastAccess: now,
-	})
+	}, nil)
 	require.NoError(t, err)
 
-	sess, err := store.Get(ctx, "sess-token-1")
+	sess, err := dbAction.FindSessionByToken(ctx, "sess-token-1")
 	require.NoError(t, err)
 	assert.Equal(t, "sess-token-1", sess.Token)
 	assert.Equal(t, userID, sess.UserID)
 
-	sess.LastAccess = now.Add(time.Hour)
-	require.NoError(t, store.Set(ctx, sess))
-
-	sessions, err := store.ListByUserID(ctx, userID)
+	sessions, err := dbAction.ListSessionsByUserID(ctx, userID)
 	require.NoError(t, err)
 	assert.Len(t, sessions, 1)
 
-	err = store.Delete(ctx, "sess-token-1")
+	err = dbAction.DeleteSessionByToken(ctx, "sess-token-1")
 	require.NoError(t, err)
 
-	_, err = store.Get(ctx, "sess-token-1")
+	_, err = dbAction.FindSessionByToken(ctx, "sess-token-1")
 	assert.ErrorIs(t, err, ErrRecordNotFound)
 }
 
-func TestDatabaseSessionStore_DeleteByUserID(t *testing.T) {
+func TestDatabaseActionHelper_DeleteSessionByUserID(t *testing.T) {
 	t.Parallel()
 
 	l := newTestLimen(t)
 	ctx := context.Background()
-	store := newDatabaseSessionStore(l.core)
+	dbAction := l.core.DBAction
 
 	userID := seedUser(t, l, "del-all@test.com")
 
 	now := time.Now()
 	for range 3 {
-		err := store.Set(ctx, &Session{
+		err := dbAction.CreateSession(ctx, &Session{
 			Token:      GenerateRandomString(32),
 			UserID:     userID,
 			CreatedAt:  now,
 			ExpiresAt:  now.Add(7 * 24 * time.Hour),
 			LastAccess: now,
-		})
+		}, nil)
 		require.NoError(t, err)
 	}
 
-	err := store.DeleteByUserID(ctx, userID)
+	err := dbAction.DeleteSessionByUserID(ctx, userID)
 	require.NoError(t, err)
 
-	sessions, err := store.ListByUserID(ctx, userID)
+	sessions, err := dbAction.ListSessionsByUserID(ctx, userID)
 	require.NoError(t, err)
 	assert.Empty(t, sessions)
 }
