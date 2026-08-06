@@ -28,6 +28,9 @@ export { defineClientPlugin, defineFields, defineRoutes, defineStores, schema } 
 export { route } from "./route";
 export { defaultSerialize } from "./serialize";
 
+export { can, canAny } from "./permissions";
+export type { PermissionInput, PermissionSource } from "./permissions";
+
 export { currentData, effect, storeRef } from "./stores";
 export type { EffectTrigger, PluginStores, StoreEffect, StoreRef, StoreRegistry } from "./stores";
 export { sessionStore } from "./session-store";
