@@ -10,9 +10,9 @@ import (
 
 // API is the public programmatic interface for the session-jwt plugin.
 type API interface {
-	// GenerateAccessToken creates a signed JWT for the given user, embedding
-	// the session data bag, and returns the token string along with its unique JTI.
-	GenerateAccessToken(user *limen.User, sessionData map[string]any) (token string, jti string, err error)
+	// GenerateAccessToken creates a signed JWT for the given user and
+	// returns the token string along with its unique JTI.
+	GenerateAccessToken(user *limen.User) (token string, jti string, err error)
 
 	// VerifyAccessToken parses and validates a JWT string, returning the
 	// decoded claims on success.
@@ -26,7 +26,7 @@ type API interface {
 	// CreateRefreshToken stores a new opaque refresh token linked to the
 	// given user and JWT ID. Pass nil for expiresAt to use the configured
 	// duration, or a non-nil pointer to inherit an existing family expiry.
-	CreateRefreshToken(ctx context.Context, userID any, jwtID string, family string, expiresAt *time.Time, sessionData map[string]any) (*RefreshToken, error)
+	CreateRefreshToken(ctx context.Context, userID any, jwtID string, family string, expiresAt *time.Time) (*RefreshToken, error)
 
 	// FindRefreshTokenByToken looks up a refresh token by its opaque value.
 	FindRefreshTokenByToken(ctx context.Context, token string) (*RefreshToken, error)

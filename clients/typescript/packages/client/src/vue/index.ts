@@ -1,29 +1,34 @@
 import { createAuthClient as createCoreClient } from "../client";
 import type { AnyClientPlugin } from "../define-plugin";
-import type { StoresOf } from "../infer";
-import { attachStoreHooks } from "../stores";
+import type { SessionState } from "../session-store";
 import type { Prettify } from "../type-utils";
-import type { AuthClient, CreateAuthClientOptions } from "../types";
+import type { AuthClient, CreateAuthClientOptions, PrettyUserFields } from "../types";
 import type { ReactiveValue } from "./vue-store";
 import { useStore } from "./vue-store";
 
-/** One composable per registered store, each returning a readonly ref. */
-export type VueStoreHooks<Stores> = {
-  readonly [K in keyof Stores & string as `use${Capitalize<K>}`]: () => ReactiveValue<Stores[K]>;
-};
-
+/**
+ * An {@link AuthClient} augmented with Vue composables.
+ */
 export type VueAuthClient<Plugins extends readonly AnyClientPlugin[], TFields = unknown> = Prettify<
-  AuthClient<Plugins, TFields> & VueStoreHooks<StoresOf<Plugins, TFields>>
+  AuthClient<Plugins, TFields> & {
+    /**
+     * Reactively read the session store as a readonly ref. Updates whenever
+     * `{ data, isPending, error }` changes.
+     */
+    useSession: () => ReactiveValue<SessionState<PrettyUserFields<Plugins, TFields>>>;
+  }
 >;
 
+/**
+ * Create a Limen auth client with Vue composables attached.
+ */
 export function createAuthClient<const Plugins extends readonly AnyClientPlugin[] = readonly [], TFields = unknown>(
   opts: CreateAuthClientOptions<Plugins, TFields>,
 ): VueAuthClient<Plugins, TFields> {
   const client = createCoreClient<Plugins, TFields>(opts);
+  const useSession = (): ReactiveValue<SessionState<PrettyUserFields<Plugins, TFields>>> => useStore(client.$session);
 
-  attachStoreHooks(client, (store) => useStore(store));
-
-  return client as VueAuthClient<Plugins, TFields>;
+  return Object.assign(client, { useSession }) as VueAuthClient<Plugins, TFields>;
 }
 
 export type { SessionState, SessionStore } from "../session-store";

@@ -87,3 +87,12 @@ describe("fetcher — per-call init", () => {
     expect(seen?.get("X-Test")).toBe("override");
   });
 });
+
+describe("fetcher — passthrough", () => {
+  it("a normal JSON response resolves with no signal/timeout interference", async () => {
+    const auth = makeClient(staticImpl(JSON.stringify([{ id: 1, token: "t" }]), { status: 200 }), { timeout: 0 });
+    const sessions = await auth.sessions();
+    expect(Array.isArray(sessions)).toBe(true);
+    expect(sessions).toHaveLength(1);
+  });
+});

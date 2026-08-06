@@ -27,16 +27,3 @@ type CacheAdapter interface {
 	// Delete removes the entry for key. It is a no-op if key does not exist.
 	Delete(ctx context.Context, key string) error
 }
-
-type AtomicCacheAdapter interface {
-	CacheAdapter
-
-	// SetExpiry sets the expiry time for the key.
-	SetExpiry(ctx context.Context, key string, ttl time.Duration) error
-
-	// Increment increments the value associated with key by delta and returns the new value.
-	Increment(ctx context.Context, key string, delta int64) (int64, error)
-
-	// Decrement decrements the value associated with key by delta and returns the new value.
-	Decrement(ctx context.Context, key string, delta int64) (int64, error)
-}

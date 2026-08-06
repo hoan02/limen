@@ -8,22 +8,23 @@ import (
 	"github.com/thecodearcher/limen"
 )
 
+// RefreshToken is the domain model stored in jwt_refresh_tokens.
 type RefreshToken struct {
-	ID          any
-	Token       string
-	UserID      any
-	JWTID       string
-	Family      string
-	SessionData map[string]any
-	ExpiresAt   time.Time
-	CreatedAt   time.Time
-	raw         map[string]any
+	ID        any
+	Token     string
+	UserID    any
+	JWTID     string
+	Family    string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+	raw       map[string]any
 }
 
 func (r *RefreshToken) Raw() map[string]any {
 	return r.raw
 }
 
+// BlacklistEntry is the domain model stored in jwt_blacklist.
 type BlacklistEntry struct {
 	JTI       string
 	ExpiresAt time.Time
@@ -34,20 +35,19 @@ func (b *BlacklistEntry) Raw() map[string]any {
 	return b.raw
 }
 
-func (p *sessionJWTPlugin) CreateRefreshToken(ctx context.Context, userID any, jwtID string, family string, expiresAt *time.Time, sessionData map[string]any) (*RefreshToken, error) {
+func (p *sessionJWTPlugin) CreateRefreshToken(ctx context.Context, userID any, jwtID string, family string, expiresAt *time.Time) (*RefreshToken, error) {
 	now := time.Now()
 	exp := now.Add(p.config.refreshTokenDuration)
 	if expiresAt != nil {
 		exp = *expiresAt
 	}
 	rt := &RefreshToken{
-		Token:       generateOpaqueToken(),
-		UserID:      userID,
-		JWTID:       jwtID,
-		Family:      family,
-		SessionData: sessionData,
-		ExpiresAt:   exp,
-		CreatedAt:   now,
+		Token:     generateOpaqueToken(),
+		UserID:    userID,
+		JWTID:     jwtID,
+		Family:    family,
+		ExpiresAt: exp,
+		CreatedAt: now,
 	}
 	if err := p.core.Create(ctx, p.refreshTokenSchema, rt, nil); err != nil {
 		return nil, fmt.Errorf("session-jwt: failed to store refresh token: %w", err)
@@ -99,7 +99,7 @@ func (p *sessionJWTPlugin) RotateRefreshToken(ctx context.Context, old *RefreshT
 		}); err != nil {
 			return fmt.Errorf("session-jwt: failed to delete old refresh token: %w", err)
 		}
-		rt, err := p.CreateRefreshToken(txCtx, old.UserID, newJWTID, old.Family, &old.ExpiresAt, old.SessionData)
+		rt, err := p.CreateRefreshToken(txCtx, old.UserID, newJWTID, old.Family, &old.ExpiresAt)
 		if err != nil {
 			return err
 		}

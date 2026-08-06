@@ -16,7 +16,7 @@ func newBackupCodesHandlers(backupCodes *backupCodes, responder *limen.Responder
 }
 
 func (b *backupCodesHandlers) UpdateBackupCodes(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		b.responder.Error(w, r, err)
 		return
@@ -31,7 +31,7 @@ func (b *backupCodesHandlers) UpdateBackupCodes(w http.ResponseWriter, r *http.R
 }
 
 func (b *backupCodesHandlers) GetBackupCodes(w http.ResponseWriter, r *http.Request) {
-	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		b.responder.Error(w, r, err)
 		return

@@ -1,13 +1,11 @@
 package limen
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -48,12 +46,12 @@ func (a *testMemoryAdapter) table(name SchemaTableName) *testMemTable {
 	return t
 }
 
-func (a *testMemoryAdapter) Create(_ context.Context, tableName SchemaTableName, data map[string]any) (DatabaseResult, error) {
+func (a *testMemoryAdapter) Create(_ context.Context, tableName SchemaTableName, data map[string]any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if len(data) == 0 {
-		return DatabaseResult{}, fmt.Errorf("no data to insert")
+		return fmt.Errorf("no data to insert")
 	}
 
 	tbl := a.table(tableName)
@@ -69,7 +67,7 @@ func (a *testMemoryAdapter) Create(_ context.Context, tableName SchemaTableName,
 	}
 
 	tbl.rows = append(tbl.rows, row)
-	return DatabaseResult{RowsAffected: 1}, nil
+	return nil
 }
 
 func (a *testMemoryAdapter) FindOne(_ context.Context, tableName SchemaTableName, conditions []Where, orderBy []OrderBy) (map[string]any, error) {
@@ -114,64 +112,34 @@ func (a *testMemoryAdapter) FindMany(_ context.Context, tableName SchemaTableNam
 	return results, nil
 }
 
-func (a *testMemoryAdapter) Update(_ context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) (DatabaseResult, error) {
+func (a *testMemoryAdapter) Update(_ context.Context, tableName SchemaTableName, conditions []Where, updates map[string]any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if len(updates) == 0 {
-		return DatabaseResult{}, nil
+		return nil
 	}
 
 	tbl := a.table(tableName)
-	var rowsAffected int64
 	for _, row := range tbl.rows {
-		if !testMatchesConditions(row, conditions) {
-			continue
-		}
-		for column, value := range updates {
-			arithmeticUpdate, ok := value.(ArithmeticUpdate)
-			if !ok {
-				row[column] = testDerefPointer(value)
-				continue
+		if testMatchesConditions(row, conditions) {
+			for k, v := range updates {
+				row[k] = testDerefPointer(v)
 			}
-
-			updated, err := testApplyArithmeticUpdate(row[column], arithmeticUpdate)
-			if err != nil {
-				return DatabaseResult{}, fmt.Errorf("update column %q: %w", column, err)
-			}
-			row[column] = updated
 		}
-		rowsAffected++
 	}
-	return DatabaseResult{RowsAffected: rowsAffected}, nil
+	return nil
 }
 
-func testApplyArithmeticUpdate(current any, update ArithmeticUpdate) (any, error) {
-	if err := update.Validate(); err != nil {
-		return nil, err
-	}
-	delta := update.Value()
-	switch value := testDerefPointer(current).(type) {
-	case int:
-		return value + int(delta), nil
-	case int32:
-		return value + int32(delta), nil
-	case int64:
-		return value + delta, nil
-	}
-	return nil, fmt.Errorf("cannot apply arithmetic update to %T", current)
-}
-
-func (a *testMemoryAdapter) Delete(_ context.Context, tableName SchemaTableName, conditions []Where) (DatabaseResult, error) {
+func (a *testMemoryAdapter) Delete(_ context.Context, tableName SchemaTableName, conditions []Where) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	tbl := a.table(tableName)
-	before := len(tbl.rows)
 	tbl.rows = slices.DeleteFunc(tbl.rows, func(row map[string]any) bool {
 		return testMatchesConditions(row, conditions)
 	})
-	return DatabaseResult{RowsAffected: int64(before - len(tbl.rows))}, nil
+	return nil
 }
 
 func (a *testMemoryAdapter) Exists(_ context.Context, tableName SchemaTableName, conditions []Where) (bool, error) {
@@ -201,30 +169,24 @@ func (a *testMemoryAdapter) Count(_ context.Context, tableName SchemaTableName, 
 	return count, nil
 }
 
-// testDerefPointer flattens pointer values produced by ToStorage so the
-// in-memory adapter behaves like a database driver.
+// testDerefPointer flattens pointer types that ToStorage produces (*string,
+// *time.Time) into plain values so FromStorage type assertions match real SQL
+// driver behavior.
 func testDerefPointer(v any) any {
 	switch p := v.(type) {
 	case *string:
-		return testDereference(p)
+		if p == nil {
+			return nil
+		}
+		return *p
 	case *time.Time:
-		return testDereference(p)
-	case *int:
-		return testDereference(p)
-	case *int32:
-		return testDereference(p)
-	case *int64:
-		return testDereference(p)
+		if p == nil {
+			return nil
+		}
+		return *p
 	default:
 		return v
 	}
-}
-
-func testDereference[T any](value *T) any {
-	if value == nil {
-		return nil
-	}
-	return *value
 }
 
 // ---------------------------------------------------------------------------
@@ -271,9 +233,9 @@ func testMatchesSingle(row map[string]any, c Where) bool {
 
 	switch c.Operator {
 	case OpIsNull:
-		return testIsNil(val)
+		return val == nil
 	case OpIsNotNull:
-		return !testIsNil(val)
+		return val != nil
 	case OpEq, "":
 		return testValuesEqual(val, c.Value)
 	case OpNe:
@@ -330,94 +292,41 @@ func testValuesEqual(a, b any) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	if a == b {
-		return true
-	}
-	// Named string types (e.g. InvitationStatus) must match plain strings.
-	if as, ok := testStringValue(a); ok {
-		bs, ok := testStringValue(b)
-		return ok && as == bs
-	}
-	return false
-}
-
-func testStringValue(value any) (string, bool) {
-	switch v := value.(type) {
-	case string:
-		return v, true
-	default:
-		rv := reflect.ValueOf(value)
-		if rv.Kind() == reflect.String {
-			return rv.String(), true
-		}
-		return "", false
-	}
-}
-
-func testIsNil(value any) bool {
-	if value == nil {
-		return true
-	}
-	rv := reflect.ValueOf(value)
-	switch rv.Kind() {
-	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func, reflect.Chan:
-		return rv.IsNil()
-	default:
-		return false
-	}
-}
-
-func testAsTime(value any) (time.Time, bool) {
-	switch v := value.(type) {
-	case time.Time:
-		return v, true
-	case *time.Time:
-		if v == nil {
-			return time.Time{}, false
-		}
-		return *v, true
-	default:
-		return time.Time{}, false
-	}
+	return a == b
 }
 
 func testCompareValues(a, b any) (int, bool) {
-	if av, ok := testIntegerValue(a); ok {
-		bv, ok := testIntegerValue(b)
-		if !ok {
-			return 0, false
-		}
-		return cmp.Compare(av, bv), true
-	}
-
-	if av, ok := testAsTime(a); ok {
-		bv, ok := testAsTime(b)
+	switch av := a.(type) {
+	case time.Time:
+		bv, ok := b.(time.Time)
 		if !ok {
 			return 0, false
 		}
 		return av.Compare(bv), true
-	}
-
-	switch av := a.(type) {
+	case int64:
+		bv, ok := b.(int64)
+		if !ok {
+			return 0, false
+		}
+		if av < bv {
+			return -1, true
+		}
+		if av > bv {
+			return 1, true
+		}
+		return 0, true
 	case string:
 		bv, ok := b.(string)
 		if !ok {
 			return 0, false
 		}
-		return cmp.Compare(av, bv), true
-	default:
-		return 0, false
-	}
-}
-
-func testIntegerValue(value any) (int64, bool) {
-	switch value := value.(type) {
-	case int:
-		return int64(value), true
-	case int32:
-		return int64(value), true
-	case int64:
-		return value, true
+		if av < bv {
+			return -1, true
+		}
+		if av > bv {
+			return 1, true
+		}
+		return 0, true
 	default:
 		return 0, false
 	}
@@ -457,18 +366,10 @@ func testSortRows(rows []map[string]any, orderBy []OrderBy) {
 // adapter.
 func NewTestLimen(t *testing.T, plugins ...Plugin) (*Limen, *LimenCore) {
 	t.Helper()
-	return NewTestLimenWithSchema(t, nil, plugins...)
-}
-
-// NewTestLimenWithSchema is NewTestLimen with a custom schema configuration,
-// for tests that need schema-level features such as public IDs.
-func NewTestLimenWithSchema(t *testing.T, schema *SchemaConfig, plugins ...Plugin) (*Limen, *LimenCore) {
-	t.Helper()
 
 	l, err := New(&Config{
 		BaseURL:  "http://localhost:8080",
 		Database: newTestMemoryAdapter(t),
-		Schema:   schema,
 		Secret:   testSecret,
 		Plugins:  plugins,
 	})
@@ -494,8 +395,8 @@ func SeedTestUser(t *testing.T, l *Limen, email string) *User {
 	return user
 }
 
-// SeedTestSession creates a session and returns its SessionResult.
-// The user must already exist.
+// SeedTestSession creates a session via the real SessionManager and returns the
+// SessionResult. The user must already exist.
 func SeedTestSession(t *testing.T, l *Limen, userID any, email string) *SessionResult {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/signin", http.NoBody)
@@ -505,26 +406,4 @@ func SeedTestSession(t *testing.T, l *Limen, userID any, email string) *SessionR
 		t.Fatalf("SeedTestSession: %v", err)
 	}
 	return result
-}
-
-// SeedTestSessionRecord creates a session and returns the stored *Session.
-func SeedTestSessionRecord(t *testing.T, l *Limen, userID any, email string) *Session {
-	t.Helper()
-
-	result := SeedTestSession(t, l, userID, email)
-	if result.Token == "" {
-		t.Fatal("SeedTestSessionRecord: empty session token")
-	}
-
-	sessions, err := l.ListSessions(t.Context(), userID)
-	if err != nil {
-		t.Fatalf("SeedTestSessionRecord: %v", err)
-	}
-	for i := range sessions {
-		if sessions[i].Token == result.Token {
-			return &sessions[i]
-		}
-	}
-	t.Fatalf("SeedTestSessionRecord: session for token %q not found", result.Token)
-	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -25,19 +24,12 @@ type CharSetType int
 const (
 	CharSetAlphanumeric CharSetType = iota
 	CharSetNumeric
-	CharSetAlphabetic
 )
 
 var (
 	alphanumericChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 	numericChars      = "0123456789"
-	alphabeticChars   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
-
-// NormalizeEmail returns the canonical representation used to store and compare email addresses.
-func NormalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
 
 // generateCryptoSecureRandomString generates a cryptographically secure random string
 func generateCryptoSecureRandomString() string {
@@ -48,15 +40,8 @@ func generateCryptoSecureRandomString() string {
 
 func GenerateRandomString(length int, charSetType ...CharSetType) string {
 	chars := alphanumericChars
-	if len(charSetType) > 0 {
-		switch charSetType[0] {
-		case CharSetNumeric:
-			chars = numericChars
-		case CharSetAlphabetic:
-			chars = alphabeticChars
-		case CharSetAlphanumeric:
-			chars = alphanumericChars
-		}
+	if len(charSetType) > 0 && charSetType[0] == CharSetNumeric {
+		chars = numericChars
 	}
 	charCount := len(chars)
 	expectedBytes := make([]byte, length)
@@ -285,13 +270,6 @@ func GetNullableValue[T any](value any) *T {
 	if v, ok := value.(T); ok {
 		return &v
 	}
-	if v, ok := value.(*T); ok {
-		if v == nil {
-			return nil
-		}
-		cp := *v
-		return &cp
-	}
 	return nil
 }
 
@@ -318,17 +296,8 @@ func getTime(v any) time.Time {
 	if v == nil {
 		return time.Time{}
 	}
-	switch t := v.(type) {
-	case time.Time:
-		return t
-	case *time.Time:
-		if t == nil {
-			return time.Time{}
-		}
-		return *t
-	default:
-		return time.Time{}
-	}
+	t, _ := v.(time.Time)
+	return t
 }
 
 func joinCustomStringSlice[T ~string](fields []T, separator string) string {
@@ -477,47 +446,4 @@ func joinURL(baseURL string, pathElems ...string) string {
 		return ""
 	}
 	return joined
-}
-
-// ToSliceOfType converts a slice of Model to a slice of a specific type.
-// Returns an empty slice if the conversion fails.
-func MapToSliceOfType[T any](values []Model) []T {
-	out := make([]T, 0, len(values))
-	for _, value := range values {
-		out = append(out, value.(T))
-	}
-	return out
-}
-
-// MapPage converts a Page of Model into a Page of a concrete type.
-func MapPage[T any](page *Page[Model]) *Page[T] {
-	return &Page[T]{
-		Items:      MapToSliceOfType[T](page.Items),
-		Total:      page.Total,
-		Page:       page.Page,
-		PerPage:    page.PerPage,
-		TotalPages: page.TotalPages,
-	}
-}
-
-func ParseJSONFromStorage[T any](data map[string]any, field string) T {
-	var zero T
-	value, ok := data[field]
-	if !ok || value == nil {
-		return zero
-	}
-	if s, ok := value.(string); ok && s != "" {
-		var parsed T
-		if json.Unmarshal([]byte(s), &parsed) == nil {
-			return parsed
-		}
-	}
-	if m, ok := value.(T); ok {
-		return m
-	}
-	return zero
-}
-
-func EmptyPage[T any](opts *QueryOptions) *Page[T] {
-	return newPage([]T{}, 0, opts)
 }

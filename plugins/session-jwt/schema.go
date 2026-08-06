@@ -1,7 +1,6 @@
 package sessionjwt
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/thecodearcher/limen"
@@ -14,13 +13,12 @@ import (
 const (
 	RefreshTokenSchemaTableName limen.SchemaTableName = "jwt_refresh_tokens"
 
-	RefreshTokenSchemaTokenField       limen.SchemaField = "token"
-	RefreshTokenSchemaUserIDField      limen.SchemaField = "user_id"
-	RefreshTokenSchemaJWTIDField       limen.SchemaField = "jwt_id"
-	RefreshTokenSchemaFamilyField      limen.SchemaField = "family"
-	RefreshTokenSchemaSessionDataField limen.SchemaField = "session_data"
-	RefreshTokenSchemaExpiresAtField   limen.SchemaField = "expires_at"
-	RefreshTokenSchemaCreatedAtField   limen.SchemaField = "created_at"
+	RefreshTokenSchemaTokenField     limen.SchemaField = "token"
+	RefreshTokenSchemaUserIDField    limen.SchemaField = "user_id"
+	RefreshTokenSchemaJWTIDField     limen.SchemaField = "jwt_id"
+	RefreshTokenSchemaFamilyField    limen.SchemaField = "family"
+	RefreshTokenSchemaExpiresAtField limen.SchemaField = "expires_at"
+	RefreshTokenSchemaCreatedAtField limen.SchemaField = "created_at"
 )
 
 const (
@@ -60,10 +58,6 @@ func (s *refreshTokenSchema) GetFamilyField() string {
 	return s.GetField(RefreshTokenSchemaFamilyField)
 }
 
-func (s *refreshTokenSchema) GetSessionDataField() string {
-	return s.GetField(RefreshTokenSchemaSessionDataField)
-}
-
 func (s *refreshTokenSchema) GetExpiresAtField() string {
 	return s.GetField(RefreshTokenSchemaExpiresAtField)
 }
@@ -74,7 +68,7 @@ func (s *refreshTokenSchema) GetCreatedAtField() string {
 
 func (s *refreshTokenSchema) ToStorage(data limen.Model) map[string]any {
 	rt := data.(*RefreshToken)
-	payload := map[string]any{
+	return map[string]any{
 		s.GetTokenField():     rt.Token,
 		s.GetUserIDField():    rt.UserID,
 		s.GetJWTIDField():     rt.JWTID,
@@ -82,26 +76,18 @@ func (s *refreshTokenSchema) ToStorage(data limen.Model) map[string]any {
 		s.GetExpiresAtField(): rt.ExpiresAt,
 		s.GetCreatedAtField(): rt.CreatedAt,
 	}
-
-	if rt.SessionData != nil {
-		if b, err := json.Marshal(rt.SessionData); err == nil {
-			payload[s.GetSessionDataField()] = string(b)
-		}
-	}
-	return payload
 }
 
 func (s *refreshTokenSchema) FromStorage(data map[string]any) limen.Model {
 	return &RefreshToken{
-		ID:          data[s.GetIDField()],
-		Token:       data[s.GetTokenField()].(string),
-		UserID:      data[s.GetUserIDField()],
-		JWTID:       data[s.GetJWTIDField()].(string),
-		Family:      data[s.GetFamilyField()].(string),
-		SessionData: limen.ParseJSONFromStorage[map[string]any](data, s.GetSessionDataField()),
-		ExpiresAt:   data[s.GetExpiresAtField()].(time.Time),
-		CreatedAt:   data[s.GetCreatedAtField()].(time.Time),
-		raw:         data,
+		ID:        data[s.GetIDField()],
+		Token:     data[s.GetTokenField()].(string),
+		UserID:    data[s.GetUserIDField()],
+		JWTID:     data[s.GetJWTIDField()].(string),
+		Family:    data[s.GetFamilyField()].(string),
+		ExpiresAt: data[s.GetExpiresAtField()].(time.Time),
+		CreatedAt: data[s.GetCreatedAtField()].(time.Time),
+		raw:       data,
 	}
 }
 
@@ -157,7 +143,6 @@ func buildRefreshTokenTableDef(schemaConfig *limen.SchemaConfig, schema *refresh
 		limen.WithSchemaField(RefreshTokenSchemaUserIDField, schemaConfig.GetIDColumnType()),
 		limen.WithSchemaField(RefreshTokenSchemaJWTIDField, limen.ColumnTypeString),
 		limen.WithSchemaField(RefreshTokenSchemaFamilyField, limen.ColumnTypeString),
-		limen.WithSchemaField(RefreshTokenSchemaSessionDataField, limen.ColumnTypeMapStringAny, limen.WithNullable(true)),
 		limen.WithSchemaField(RefreshTokenSchemaExpiresAtField, limen.ColumnTypeTime),
 		limen.WithSchemaField(RefreshTokenSchemaCreatedAtField, limen.ColumnTypeTime, limen.WithDefaultValue(string(limen.DatabaseDefaultValueNow))),
 		limen.WithSchemaUniqueIndex("idx_jwt_refresh_tokens_token", []limen.SchemaField{RefreshTokenSchemaTokenField}),
@@ -171,7 +156,6 @@ func buildRefreshTokenTableDef(schemaConfig *limen.SchemaConfig, schema *refresh
 			OnDelete:         limen.FKActionCascade,
 			OnUpdate:         limen.FKActionCascade,
 		}),
-		limen.WithDisablePublicID(),
 	)
 }
 
@@ -183,6 +167,5 @@ func buildBlacklistTableDef(schema *blacklistSchema) *limen.SchemaDefinition {
 		limen.WithSchemaField(BlacklistSchemaJTIField, limen.ColumnTypeString, limen.WithPrimaryKey(true)),
 		limen.WithSchemaField(BlacklistSchemaExpiresAtField, limen.ColumnTypeTime),
 		limen.WithSchemaIndex("idx_jwt_blacklist_expires_at", []limen.SchemaField{BlacklistSchemaExpiresAtField}),
-		limen.WithDisablePublicID(),
 	)
 }

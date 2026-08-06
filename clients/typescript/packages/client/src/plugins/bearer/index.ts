@@ -34,9 +34,8 @@ export function bearerPlugin(config: BearerPluginConfig = {}) {
           run: (res) => {
             const accessToken = res.headers.get(SET_AUTH_TOKEN_HEADER);
             if (accessToken) {
-              const current = store.get();
               const tokens: BearerTokens = { accessToken };
-              const refreshToken = res.headers.get(SET_REFRESH_TOKEN_HEADER) ?? current?.refreshToken;
+              const refreshToken = res.headers.get(SET_REFRESH_TOKEN_HEADER);
               if (refreshToken) {
                 tokens.refreshToken = refreshToken;
               }

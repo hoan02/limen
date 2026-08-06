@@ -24,10 +24,9 @@ func TestRequestPasswordReset(t *testing.T) {
 	plugin := newTestLimenWithPlugin(t)
 	seedTestUser(t, plugin, "reset@test.com", "Password1")
 
-	verification, err := plugin.RequestPasswordReset(context.Background(), " RESET@TEST.COM ")
+	verification, err := plugin.RequestPasswordReset(context.Background(), "reset@test.com")
 	require.NoError(t, err)
 	assert.NotEmpty(t, verification.Value, "should return a reset token")
-	assert.Equal(t, "password_reset::reset@test.com", verification.Subject)
 }
 
 func TestRequestPasswordReset_NonExistentEmail(t *testing.T) {
@@ -108,14 +107,13 @@ func TestSetPassword_RevokeSessions(t *testing.T) {
 
 	l, plugin := newTestLimenAndPlugin(t)
 	user := seedOAuthTestUser(t, plugin, "revoke-set@test.com")
-	limen.SeedTestSession(t, l, user.ID, user.Email)
+	session := limen.SeedTestSession(t, l, user.ID, user.Email)
 
 	err := plugin.SetPassword(context.Background(), user, "NewPassword1", true)
 	require.NoError(t, err)
 
-	sessions, err := plugin.core.SessionManager.ListSessions(context.Background(), user.ID)
-	require.NoError(t, err)
-	assert.Empty(t, sessions)
+	_, err = plugin.dbAction.FindSessionByToken(context.Background(), session.Token)
+	assert.ErrorIs(t, err, limen.ErrRecordNotFound)
 
 	result, err := plugin.SignInWithCredentialAndPassword(context.Background(), "revoke-set@test.com", "NewPassword1")
 	require.NoError(t, err)
@@ -165,14 +163,13 @@ func TestUpdatePassword_RevokeSessions(t *testing.T) {
 
 	l, plugin := newTestLimenAndPlugin(t)
 	user := seedTestUser(t, plugin, "revoke-upd@test.com", "OldPassword1")
-	limen.SeedTestSession(t, l, user.ID, user.Email)
+	session := limen.SeedTestSession(t, l, user.ID, user.Email)
 
 	err := plugin.UpdatePassword(context.Background(), user, "OldPassword1", "NewPassword1", true)
 	require.NoError(t, err)
 
-	sessions, err := plugin.core.SessionManager.ListSessions(context.Background(), user.ID)
-	require.NoError(t, err)
-	assert.Empty(t, sessions)
+	_, err = plugin.dbAction.FindSessionByToken(context.Background(), session.Token)
+	assert.ErrorIs(t, err, limen.ErrRecordNotFound)
 
 	result, err := plugin.SignInWithCredentialAndPassword(context.Background(), "revoke-upd@test.com", "NewPassword1")
 	require.NoError(t, err)

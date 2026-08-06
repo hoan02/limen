@@ -2,8 +2,6 @@ package sessionjwt
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"maps"
 	"net/http"
 	"time"
@@ -20,7 +18,7 @@ type jwtSessionManager struct {
 func (m *jwtSessionManager) CreateSession(ctx context.Context, r *http.Request, auth *limen.AuthenticationResult, shortSession bool) (*limen.SessionResult, error) {
 	p := m.plugin
 
-	signed, jti, err := p.GenerateAccessToken(auth.User, nil)
+	signed, jti, err := p.GenerateAccessToken(auth.User)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +35,7 @@ func (m *jwtSessionManager) CreateSession(ctx context.Context, r *http.Request, 
 	}
 
 	family := generateJTI()
-	rt, err := p.CreateRefreshToken(ctx, auth.User.ID, jti, family, expiresAt, nil)
+	rt, err := p.CreateRefreshToken(ctx, auth.User.ID, jti, family, expiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -137,106 +135,6 @@ func (m *jwtSessionManager) RevokeAllSessions(ctx context.Context, userID any) e
 	return p.DeleteRefreshTokensByUserID(ctx, userID)
 }
 
-func (m *jwtSessionManager) GetSessionData(_ context.Context, session *limen.Session, field limen.SchemaField) (any, error) {
-	return m.plugin.core.Schema.Session.SessionData(session, field)
-}
-
-func (m *jwtSessionManager) UpdateSession(ctx context.Context, session *limen.Session, data map[limen.SchemaField]any) (*limen.SessionResult, error) {
-	p := m.plugin
-
-	claims := p.parseAccessTokenLenient(session.Token)
-	if claims == nil {
-		return nil, ErrInvalidAccessToken
-	}
-
-	sessionData, err := p.mergeSessionData(claims.Session, data)
-	if err != nil {
-		return nil, err
-	}
-
-	signed, newClaims, err := p.reissueAccessToken(claims, sessionData)
-	if err != nil {
-		return nil, err
-	}
-
-	if p.config.refreshTokenEnabled {
-		if err := p.updateRefreshTokenSessionData(ctx, claims.ID, newClaims.ID, sessionData); err != nil {
-			return nil, err
-		}
-	}
-
-	*session = *p.claimsToSession(newClaims, signed, session.UserID)
-	return p.buildSessionResult(signed, nil), nil
-}
-
-// UpdateSessions is a no-op: matching sessions would require decoding every
-// refresh token's session_data, and stale values are already guarded by
-// consumers re-checking the referenced resources.
-func (m *jwtSessionManager) UpdateSessions(context.Context, map[limen.SchemaField]any, map[limen.SchemaField]any) error {
-	return nil
-}
-
-func (p *sessionJWTPlugin) updateRefreshTokenSessionData(ctx context.Context, oldJTI, newJTI string, sessionData map[string]any) error {
-	encoded, err := encodeSessionData(sessionData)
-	if err != nil {
-		return err
-	}
-
-	result, err := p.core.UpdateWithResult(ctx, p.refreshTokenSchema, map[limen.SchemaField]any{
-		RefreshTokenSchemaJWTIDField:       newJTI,
-		RefreshTokenSchemaSessionDataField: encoded,
-	}, []limen.Where{
-		limen.Eq(p.refreshTokenSchema.GetJWTIDField(), oldJTI),
-	})
-	if err != nil {
-		return err
-	}
-
-	if result.RowsAffected == 0 {
-		return ErrStaleAccessToken
-	}
-	return nil
-}
-
-// mergeSessionData applies the update to the token's session data bag, keyed by
-// session column so claimsToSession can overlay it on the stored session.
-func (p *sessionJWTPlugin) mergeSessionData(current map[string]any, data map[limen.SchemaField]any) (map[string]any, error) {
-	schema := p.core.Schema.Session
-	merged := maps.Clone(current)
-	if merged == nil {
-		merged = make(map[string]any, len(data))
-	}
-	for field, value := range data {
-		column := schema.GetField(field)
-		if column == "" {
-			return nil, fmt.Errorf("%w: %q", limen.ErrUnknownSessionField, field)
-		}
-		if sv, ok := value.(limen.SessionValue); ok {
-			value = sv.Client
-		}
-		if value == nil {
-			delete(merged, column)
-			continue
-		}
-		merged[column] = value
-	}
-	if len(merged) == 0 {
-		return nil, nil
-	}
-	return merged, nil
-}
-
-func encodeSessionData(sessionData map[string]any) (any, error) {
-	if sessionData == nil {
-		return nil, nil
-	}
-	b, err := json.Marshal(sessionData)
-	if err != nil {
-		return nil, fmt.Errorf("session-jwt: failed to encode session data: %w", err)
-	}
-	return string(b), nil
-}
-
 func (p *sessionJWTPlugin) buildSessionResult(jwtString string, rt *RefreshToken) *limen.SessionResult {
 	result := &limen.SessionResult{Token: jwtString}
 	if rt != nil {
@@ -281,22 +179,15 @@ func (p *sessionJWTPlugin) claimsToSession(claims *LimenClaims, rawToken string,
 		expiresAt = claims.ExpiresAt.Time
 	}
 
-	schema := p.core.Schema.Session
-	// raw carries the jti in place of the signed token to keep the snapshot small.
-	data := map[string]any{
-		schema.GetIDField():         claims.ID,
-		schema.GetTokenField():      claims.ID,
-		schema.GetUserIDField():     userID,
-		schema.GetCreatedAtField():  issuedAt,
-		schema.GetExpiresAtField():  expiresAt,
-		schema.GetLastAccessField(): time.Now(),
-		schema.GetMetadataField():   claimsMetadata(claims),
+	return &limen.Session{
+		ID:         claims.ID,
+		Token:      rawToken,
+		UserID:     userID,
+		CreatedAt:  issuedAt,
+		ExpiresAt:  expiresAt,
+		LastAccess: time.Now(),
+		Metadata:   claimsMetadata(claims),
 	}
-	maps.Copy(data, claims.Session)
-
-	session := schema.FromStorage(data).(*limen.Session)
-	session.Token = rawToken
-	return session
 }
 
 func (p *sessionJWTPlugin) claimsToUser(claims *LimenClaims, userID any) *limen.User {
@@ -307,7 +198,9 @@ func (p *sessionJWTPlugin) claimsToUser(claims *LimenClaims, userID any) *limen.
 	}
 	raw[schema.GetIDField()] = userID
 	raw[schema.GetEmailField()] = claims.Email
-	raw[schema.GetEmailVerifiedAtField()] = claims.EmailVerifiedAt
+	if claims.EmailVerified {
+		raw[schema.GetEmailVerifiedAtField()] = time.Now()
+	}
 
 	return schema.FromStorage(raw).(*limen.User)
 }

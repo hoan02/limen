@@ -58,10 +58,11 @@ func routes(e *credentialPasswordHandlers) {
 // SignInWithCredentialAndPassword handles user sign-in with either email or username (if enabled) and password.
 // The credential can be either an email address or a username.
 func (p *credentialPasswordHandlers) SignInWithCredentialAndPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
-		v.Field("credential").Required()
-		v.Field("password").Required()
-	})
+	body := limen.ValidateJSON(w, r, p.responder,
+		func(v *limen.Validator, data map[string]any) *limen.Validator {
+			return v.RequiredString("credential", data["credential"]).
+				RequiredString("password", data["password"])
+		})
 
 	if body == nil {
 		return
@@ -86,23 +87,29 @@ func (p *credentialPasswordHandlers) SignInWithCredentialAndPassword(w http.Resp
 	p.responder.SessionResponse(w, r, p.plugin.core, result, sessionResult)
 }
 
-func (p *credentialPasswordHandlers) isUsernameRequiredOnSignup() bool {
-	return p.plugin.config.usernameRequiredOnSignup && p.plugin.config.enableUsername
-}
-
 // SignUpWithCredentialAndPassword handles user registration with email and password.
 // If username support is enabled, a username can be provided in the request body.
 func (p *credentialPasswordHandlers) SignUpWithCredentialAndPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
-		v.Field("email").Required().Email()
-		v.Field("password").Required().String().Custom(func(value any, _ map[string]any) error {
-			password, _ := value.(string)
-			return p.plugin.validatePassword(password)
-		})
-		v.Field("username").RequiredWhen(p.isUsernameRequiredOnSignup).String().Custom(func(value any, _ map[string]any) error {
-			username, _ := value.(string)
-			return p.plugin.validateUsername(username)
-		})
+	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
+		return v.RequiredString("email", data["email"]).
+			RequiredString("password", data["password"]).
+			Email("email", data["email"]).
+			Custom("username", func() error {
+				username, ok := data["username"].(string)
+				if !ok {
+					data["username"] = ""
+					username = ""
+				}
+				return p.plugin.validateUsername(username)
+			}, false).
+			Custom("password", func() error {
+				password, ok := data["password"].(string)
+				if !ok {
+					data["password"] = ""
+					password = ""
+				}
+				return p.plugin.validatePassword(password)
+			}, false)
 	})
 
 	if body == nil {
@@ -142,8 +149,10 @@ func (p *credentialPasswordHandlers) SignUpWithCredentialAndPassword(w http.Resp
 // RequestPasswordReset handles password reset requests.
 // To prevent email enumeration, always returns success regardless of whether the email exists.
 func (p *credentialPasswordHandlers) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
-		v.Field("email").Required().Email()
+	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
+		return v.
+			RequiredString("email", data["email"]).
+			Email("email", data["email"])
 	})
 
 	if body == nil {
@@ -168,12 +177,17 @@ func (p *credentialPasswordHandlers) RequestPasswordReset(w http.ResponseWriter,
 
 // ResetPassword handles password reset using a valid reset token.
 func (p *credentialPasswordHandlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
-		v.Field("token").Required()
-		v.Field("new_password").Required().Custom(func(value any, _ map[string]any) error {
-			newPassword, _ := value.(string)
-			return p.plugin.validatePassword(newPassword)
-		})
+	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
+		return v.
+			RequiredString("token", data["token"]).
+			RequiredString("new_password", data["new_password"]).
+			Custom("new_password", func() error {
+				newPassword, ok := data["new_password"].(string)
+				if !ok {
+					newPassword = ""
+				}
+				return p.plugin.validatePassword(newPassword)
+			}, false)
 	})
 
 	if body == nil {
@@ -192,12 +206,17 @@ func (p *credentialPasswordHandlers) ResetPassword(w http.ResponseWriter, r *htt
 // ChangePassword handles password changes for authenticated users.
 // Optionally revokes all other sessions when revoke_other_sessions is true.
 func (p *credentialPasswordHandlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
-		v.Field("current_password").Required()
-		v.Field("new_password").Required().Custom(func(value any, _ map[string]any) error {
-			newPassword, _ := value.(string)
-			return p.plugin.validatePassword(newPassword)
-		})
+	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
+		return v.
+			RequiredString("current_password", data["current_password"]).
+			RequiredString("new_password", data["new_password"]).
+			Custom("new_password", func() error {
+				newPassword, ok := data["new_password"].(string)
+				if !ok {
+					newPassword = ""
+				}
+				return p.plugin.validatePassword(newPassword)
+			}, false)
 	})
 
 	if body == nil {
@@ -209,7 +228,7 @@ func (p *credentialPasswordHandlers) ChangePassword(w http.ResponseWriter, r *ht
 		revokeOtherSessions = value
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		p.responder.Error(w, r, err)
 		return
@@ -239,11 +258,16 @@ func (p *credentialPasswordHandlers) ChangePassword(w http.ResponseWriter, r *ht
 }
 
 func (p *credentialPasswordHandlers) SetPassword(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
-		v.Field("new_password").Required().Custom(func(value any, _ map[string]any) error {
-			newPassword, _ := value.(string)
-			return p.plugin.validatePassword(newPassword)
-		})
+	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
+		return v.
+			RequiredString("new_password", data["new_password"]).
+			Custom("new_password", func() error {
+				newPassword, ok := data["new_password"].(string)
+				if !ok {
+					newPassword = ""
+				}
+				return p.plugin.validatePassword(newPassword)
+			}, false)
 	})
 
 	if body == nil {
@@ -255,7 +279,7 @@ func (p *credentialPasswordHandlers) SetPassword(w http.ResponseWriter, r *http.
 		revokeOtherSessions = value
 	}
 
-	session, err := limen.GetCurrentSessionFromCtx(r.Context())
+	session, err := limen.GetCurrentSessionFromCtx(r)
 	if err != nil {
 		p.responder.Error(w, r, err)
 		return
@@ -286,11 +310,15 @@ func (p *credentialPasswordHandlers) SetPassword(w http.ResponseWriter, r *http.
 
 // CheckUsernameAvailability handles username availability checks.
 func (p *credentialPasswordHandlers) CheckUsernameAvailability(w http.ResponseWriter, r *http.Request) {
-	body := limen.ValidateRequest(w, r, p.responder, func(v *limen.Validator) {
-		v.Field("username").Required().Custom(func(value any, _ map[string]any) error {
-			username, _ := value.(string)
-			return p.plugin.validateUsername(username)
-		})
+	body := limen.ValidateJSON(w, r, p.responder, func(v *limen.Validator, data map[string]any) *limen.Validator {
+		return v.RequiredString("username", data["username"]).
+			Custom("username", func() error {
+				username, ok := data["username"].(string)
+				if !ok {
+					username = ""
+				}
+				return p.plugin.validateUsername(username)
+			}, false)
 	})
 
 	if body == nil {

@@ -6,15 +6,14 @@ import (
 
 // SchemaDefinition represents a complete schema definition.
 type SchemaDefinition struct {
-	TableName       SchemaTableName
-	Columns         []ColumnDefinition
-	Indexes         []IndexDefinition
-	ForeignKeys     []ForeignKeyDefinition
-	SchemaName      SchemaName // Name of the schema
-	Extends         SchemaName // If extending a core schema (e.g., CoreSchemaUsers), nil for new tables
-	PluginName      string     // Name of the plugin that owns this schema, empty for core schemas
-	Schema          Schema     `json:"-"` // Schema instance (excluded from JSON serialization for CLI)
-	DisablePublicID bool       // Skip public-ID column/index injection for this schema definition
+	TableName   SchemaTableName
+	Columns     []ColumnDefinition
+	Indexes     []IndexDefinition
+	ForeignKeys []ForeignKeyDefinition
+	SchemaName  SchemaName // Name of the schema
+	Extends     SchemaName // If extending a core schema (e.g., CoreSchemaUsers), nil for new tables
+	PluginName  string     // Name of the plugin that owns this schema, empty for core schemas
+	Schema      Schema     `json:"-"` // Schema instance (excluded from JSON serialization for CLI)
 }
 
 // For extensions, it uses the SchemaName as a temporary table name.
@@ -94,13 +93,6 @@ func NewSchemaDefinitionForExtension(schemaName SchemaName, modifiedSchema Schem
 
 type SchemaDefinitionOption func(*SchemaDefinition)
 
-// WithDisablePublicID disables public-ID behavior for this schema definition.
-func WithDisablePublicID() SchemaDefinitionOption {
-	return func(d *SchemaDefinition) {
-		d.DisablePublicID = true
-	}
-}
-
 func WithSchemaIDField(config *SchemaConfig) SchemaDefinitionOption {
 	idType := config.GetIDColumnType()
 
@@ -112,56 +104,6 @@ func WithSchemaIDField(config *SchemaConfig) SchemaDefinitionOption {
 			IsNullable:   false,
 			IsPrimaryKey: true,
 		})
-	}
-}
-
-func WithSchemaCreatedAtField() SchemaDefinitionOption {
-	return func(d *SchemaDefinition) {
-		d.Columns = append(d.Columns, ColumnDefinition{
-			Name:         string(SchemaCreatedAtField),
-			LogicalField: SchemaCreatedAtField,
-			Type:         ColumnTypeTime,
-			DefaultValue: string(DatabaseDefaultValueNow),
-			IsNullable:   false,
-			IsPrimaryKey: false,
-		})
-	}
-}
-
-func WithSchemaUpdatedAtField() SchemaDefinitionOption {
-	return func(d *SchemaDefinition) {
-		d.Columns = append(d.Columns, ColumnDefinition{
-			Name:         string(SchemaUpdatedAtField),
-			LogicalField: SchemaUpdatedAtField,
-			Type:         ColumnTypeTime,
-			DefaultValue: string(DatabaseDefaultValueNow),
-		})
-	}
-}
-
-func WithSchemaSoftDeleteField() SchemaDefinitionOption {
-	return func(d *SchemaDefinition) {
-		d.Columns = append(d.Columns, ColumnDefinition{
-			Name:         string(SchemaSoftDeleteField),
-			LogicalField: SchemaSoftDeleteField,
-			Type:         ColumnTypeTime,
-			IsNullable:   true,
-		})
-		d.Indexes = append(d.Indexes, IndexDefinition{
-			Name:    "idx_soft_deletes",
-			Columns: []SchemaField{SchemaSoftDeleteField},
-			Unique:  false,
-		})
-	}
-}
-
-func WithDateFields(hasSoftDelete bool) SchemaDefinitionOption {
-	return func(d *SchemaDefinition) {
-		WithSchemaCreatedAtField()(d)
-		WithSchemaUpdatedAtField()(d)
-		if hasSoftDelete {
-			WithSchemaSoftDeleteField()(d)
-		}
 	}
 }
 
@@ -197,7 +139,7 @@ func WithSchemaIndex(name string, columns []SchemaField) SchemaDefinitionOption 
 	}
 }
 
-// WithSchemaUniqueIndex adds a unique index to the schema
+// WithSchemaIndex adds an index to the schema
 func WithSchemaUniqueIndex(name string, columns []SchemaField) SchemaDefinitionOption {
 	return func(d *SchemaDefinition) {
 		d.Indexes = append(d.Indexes, IndexDefinition{

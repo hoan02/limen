@@ -1,7 +1,6 @@
 package limen
 
 import (
-	"maps"
 	"time"
 )
 
@@ -72,7 +71,7 @@ func (u *UserSchema) FromStorage(data map[string]any) Model {
 func (u *UserSchema) ToStorage(data Model) map[string]any {
 	user := data.(*User)
 	return map[string]any{
-		u.GetEmailField():           NormalizeEmail(user.Email),
+		u.GetEmailField():           user.Email,
 		u.GetPasswordField():        user.Password,
 		u.GetEmailVerifiedAtField(): user.EmailVerifiedAt,
 	}
@@ -82,7 +81,7 @@ func (u *UserSchema) Serialize(data Model) map[string]any {
 	if u.Serializer != nil {
 		return u.Serializer(data)
 	}
-	raw := maps.Clone(data.Raw())
+	raw := data.Raw()
 	delete(raw, u.GetIDField())
 	delete(raw, u.GetPasswordField())
 	return raw

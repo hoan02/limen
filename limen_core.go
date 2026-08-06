@@ -3,7 +3,6 @@ package limen
 import (
 	"context"
 	"fmt"
-	"maps"
 	"net/http"
 )
 
@@ -20,68 +19,6 @@ type LimenCore struct {
 	schemaResolver *SchemaResolver
 	plugins        map[PluginName]Plugin
 	secret         []byte
-}
-
-func (c *LimenCore) getPublicIDConfig(schema Schema) (SchemaName, *PublicIDConfig, bool) {
-	schemaName := schema.GetSchemaName()
-	if schemaName == "" {
-		return "", nil, false
-	}
-
-	config, ok := c.Schema.getPublicIDConfig(schemaName)
-	if !ok {
-		return schemaName, nil, false
-	}
-	return schemaName, config, true
-}
-
-func (c *LimenCore) EncodePublicID(schema Schema, model Model) (string, bool) {
-	schemaName, config, ok := c.getPublicIDConfig(schema)
-	if !ok || model == nil {
-		return "", false
-	}
-
-	column := schema.GetField(config.field)
-	value, ok := model.Raw()[column].(string)
-	if !ok || value == "" {
-		return "", false
-	}
-	return config.Encoder(schemaName, value), true
-}
-
-func (c *LimenCore) IsPublicID(schema Schema, value string) bool {
-	schemaName, config, ok := c.getPublicIDConfig(schema)
-	if !ok {
-		return false
-	}
-	return config.Matcher(schemaName, value)
-}
-
-func (c *LimenCore) DecodePublicID(schema Schema, value string) (string, error) {
-	schemaName, config, ok := c.getPublicIDConfig(schema)
-	if !ok {
-		return "", fmt.Errorf("failed to get public ID config for schema %s", schema.GetSchemaName())
-	}
-	return config.Decoder(schemaName, value)
-}
-
-func (c *LimenCore) SerializeModel(schema Schema, model Model) map[string]any {
-	serialized := maps.Clone(schema.Serialize(model))
-	_, config, enabled := c.getPublicIDConfig(schema)
-
-	if _, ok := serialized[schema.GetIDField()].(string); !ok {
-		delete(serialized, schema.GetIDField())
-	}
-
-	if !enabled || config.DisableResponseTransform {
-		return serialized
-	}
-
-	delete(serialized, schema.GetField(config.field))
-	if encoded, ok := c.EncodePublicID(schema, model); ok {
-		serialized[config.ResponseField] = encoded
-	}
-	return serialized
 }
 
 func (a *LimenCore) initializeSchemas(discoveredSchemas map[SchemaName]SchemaDefinition) error {
@@ -116,12 +53,6 @@ func (c *LimenCore) Cookies() *cookieManager {
 // Plugins should use this as a fallback when no per-feature store is configured.
 func (c *LimenCore) CacheStore() CacheAdapter {
 	return c.cacheStore
-}
-
-// AtomicCacheStore returns the global AtomicCacheAdapter instance.
-// Plugins should use this when they need atomic operations on the cache (e.g. increment/decrement).
-func (c *LimenCore) AtomicCacheStore() AtomicCacheAdapter {
-	return c.cacheStore.(AtomicCacheAdapter)
 }
 
 // CacheKeyPrefix returns the prefix used for all cache keys (sessions, rate limits).

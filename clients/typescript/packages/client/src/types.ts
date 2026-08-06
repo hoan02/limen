@@ -1,9 +1,10 @@
 import type { ReadableAtom } from "nanostores";
 import type { AnyClientPlugin } from "./define-plugin";
 import type { FetcherFetchOptions } from "./fetcher";
-import type { CombinedClientContributions, InferUserFields, StoresOf } from "./infer";
+import type { CombinedClientContributions, InferUserFields } from "./infer";
 import type { PluginOverrides } from "./plugin";
 import type { CoreContribution } from "./routes";
+import type { SessionState } from "./session-store";
 import type { Prettify } from "./type-utils";
 
 export type ClientFetchOptions = Partial<FetcherFetchOptions>;
@@ -64,17 +65,15 @@ export type PrettyUserFields<Plugins extends readonly AnyClientPlugin[], TFields
   InferUserFields<Plugins, TFields>
 >;
 
-/** Each store exposed on the client under a `$` prefix, read-only. */
-export type StoreAtoms<Stores> = {
-  readonly [K in keyof Stores & string as `$${K}`]: ReadableAtom<Stores[K]>;
-};
-
 export type AuthClient<Plugins extends readonly AnyClientPlugin[], TFields = unknown> = Prettify<
   {
     readonly baseURL: string;
     readonly basePath: string;
-  } & StoreAtoms<StoresOf<Plugins, TFields>> &
-    CoreContribution<PrettyUserFields<Plugins, TFields>> &
+    /**
+     * Reactive session store holding `{ data, isPending, error }`.
+     */
+    readonly $session: ReadableAtom<SessionState<PrettyUserFields<Plugins, TFields>>>;
+  } & CoreContribution<PrettyUserFields<Plugins, TFields>> &
     CombinedClientContributions<Plugins>
 >;
 
@@ -95,27 +94,6 @@ export type User<TFields = unknown> = {
 
 export type Session<TFields = unknown> = {
   user: User<TFields>;
-};
-
-/**
- * Query values for a request. An array value is sent comma-separated.
- */
-export type QueryParams = Record<string, string>;
-
-/**
- * Pagination accepted by list routes.
- */
-export type PaginationInput = {
-  page?: number;
-  perPage?: number;
-};
-
-export type Page<T> = {
-  items: T[];
-  total: number;
-  page: number;
-  perPage: number;
-  totalPages: number;
 };
 
 export type EnvelopeMode = "off" | "wrap-success" | "always";

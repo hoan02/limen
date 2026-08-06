@@ -5,32 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestNormalizeEmail(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		email string
-		want  string
-	}{
-		{name: "already normalized", email: "user@example.com", want: "user@example.com"},
-		{name: "mixed case", email: "User@Example.COM", want: "user@example.com"},
-		{name: "surrounding whitespace", email: " \tUser@Example.COM\n", want: "user@example.com"},
-		{name: "plus address", email: "User.Name+tag@Example.com", want: "user.name+tag@example.com"},
-		{name: "empty", email: "", want: ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.want, NormalizeEmail(tt.email))
-		})
-	}
-}
 
 func TestGenerateRandomString_Length(t *testing.T) {
 	t.Parallel()
@@ -93,24 +68,6 @@ func TestGetFromMap(t *testing.T) {
 			assert.Equal(t, tt.expected, GetFromMap[string](tt.m, tt.key))
 		})
 	}
-}
-
-func TestGetNullableValue(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now()
-	assert.Nil(t, GetNullableValue[time.Time](nil))
-
-	fromValue := GetNullableValue[time.Time](now)
-	require.NotNil(t, fromValue)
-	assert.True(t, fromValue.Equal(now))
-
-	fromPtr := GetNullableValue[time.Time](&now)
-	require.NotNil(t, fromPtr)
-	assert.True(t, fromPtr.Equal(now))
-
-	var typedNil *time.Time
-	assert.Nil(t, GetNullableValue[time.Time](typedNil))
 }
 
 func TestSortRulesBySpecificity(t *testing.T) {

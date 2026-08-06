@@ -37,7 +37,7 @@ func TestGenerateAccessToken(t *testing.T) {
 	plugin := newTestPlugin()
 	user := &limen.User{ID: "user-1", Email: "a@b.com"}
 
-	signed, jti, err := plugin.GenerateAccessToken(user, nil)
+	signed, jti, err := plugin.GenerateAccessToken(user)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, signed)
 	assert.NotEmpty(t, jti)
@@ -49,7 +49,7 @@ func TestGenerateAccessToken_ContainsClaims(t *testing.T) {
 	plugin := newTestPlugin()
 	user := &limen.User{ID: "user-1", Email: "a@b.com"}
 
-	signed, _, err := plugin.GenerateAccessToken(user, nil)
+	signed, _, err := plugin.GenerateAccessToken(user)
 	assert.NoError(t, err)
 
 	claims, err := plugin.VerifyAccessToken(signed)
@@ -69,7 +69,7 @@ func TestGenerateAccessToken_CustomClaims(t *testing.T) {
 	}
 
 	user := &limen.User{ID: "user-1", Email: "a@b.com"}
-	signed, _, err := plugin.GenerateAccessToken(user, nil)
+	signed, _, err := plugin.GenerateAccessToken(user)
 	assert.NoError(t, err)
 
 	claims, err := plugin.VerifyAccessToken(signed)
@@ -84,7 +84,7 @@ func TestVerifyAccessToken_Expired(t *testing.T) {
 	plugin.config.accessTokenDuration = -1 * time.Second // already expired
 
 	user := &limen.User{ID: "user-1", Email: "a@b.com"}
-	signed, _, err := plugin.GenerateAccessToken(user, nil)
+	signed, _, err := plugin.GenerateAccessToken(user)
 	assert.NoError(t, err)
 
 	_, err = plugin.VerifyAccessToken(signed)
@@ -96,7 +96,7 @@ func TestVerifyAccessToken_WrongSignature(t *testing.T) {
 
 	plugin := newTestPlugin()
 	user := &limen.User{ID: "user-1", Email: "a@b.com"}
-	signed, _, err := plugin.GenerateAccessToken(user, nil)
+	signed, _, err := plugin.GenerateAccessToken(user)
 	assert.NoError(t, err)
 
 	wrongPlugin := newTestPlugin()
@@ -121,7 +121,7 @@ func TestVerifyAccessToken_WrongIssuer(t *testing.T) {
 
 	plugin := newTestPlugin()
 	user := &limen.User{ID: "user-1", Email: "a@b.com"}
-	signed, _, _ := plugin.GenerateAccessToken(user, nil)
+	signed, _, _ := plugin.GenerateAccessToken(user)
 
 	verifier := newTestPlugin()
 	verifier.config.issuer = "wrong-issuer"
@@ -137,7 +137,7 @@ func TestParseAccessTokenLenient_ExpiredButValid(t *testing.T) {
 	plugin.config.accessTokenDuration = -1 * time.Second
 
 	user := &limen.User{ID: "user-1", Email: "a@b.com"}
-	signed, _, _ := plugin.GenerateAccessToken(user, nil)
+	signed, _, _ := plugin.GenerateAccessToken(user)
 
 	claims := plugin.parseAccessTokenLenient(signed)
 	assert.NotNil(t, claims)
